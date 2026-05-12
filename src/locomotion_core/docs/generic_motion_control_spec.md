@@ -13,9 +13,14 @@ This document outlines the motion control specifications for the rover.
 - `deadman`: Output `std_msgs/msg/Bool` deadman signal
 
 ## Used Twist Fields
-- `linear.x`: lateral velocity command
-- `linear.y`: forward/backward velocity command
-- `angular.z`: yaw velocity command
+- `linear.x`: lateral velocity command (robot body frame, positive to the right)
+- `linear.y`: forward/backward velocity command (robot body frame, positive forward)
+- `angular.z`: yaw velocity command (positive counter-clockwise)
+
+## Coordinate frame
+- Twist values are interpreted in the rover body frame.
+- `linear.x` is side-to-side motion, `linear.y` is forward/backward motion.
+- `linear.z` is not used by the current locomotion controller.
 
 ## Nodes
 - `rover_velocity`: Converts Twist to RPM

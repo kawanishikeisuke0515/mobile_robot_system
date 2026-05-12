@@ -11,9 +11,15 @@ This package detects ArUco markers and publishes distance information.
 
 ## Message Fields
 - `id`: detected marker ID
-- `x`, `y`, `z`: marker pose translation in meters
+- `x`: marker translation in the camera frame, positive to the right
+- `y`: marker translation in the camera frame, positive down
+- `z`: marker translation in the camera frame, positive forward (away from the camera)
 - `distance`: Euclidean distance to the marker in meters
 - `theta`: horizontal marker angle in radians
+
+## Coordinate frame
+- `ArucoDistance` is published in the OpenCV camera coordinate frame as returned by `cv2.aruco.estimatePoseSingleMarkers()`.
+- In this frame, `x` = right, `y` = down, `z` = forward.
 
 ## Nodes
 - `aruco_distance_publisher`: Main node for detection and publishing

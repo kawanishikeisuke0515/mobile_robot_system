@@ -128,6 +128,8 @@ class ArucoDistancePublisher(Node):
 
         for i, marker_id in enumerate(ids.flatten()):
             tvec = tvecs[i][0]
+            # OpenCV camera coordinate frame:
+            # x = right, y = down, z = forward
             x_m = float(tvec[0])
             y_m = float(tvec[1])
             z_m = float(tvec[2])

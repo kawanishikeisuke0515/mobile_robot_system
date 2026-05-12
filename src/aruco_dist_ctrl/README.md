@@ -32,8 +32,16 @@ type: aruco_interfaces/msg/ArucoDistance
 ### Expected Field
 
 ```
-z : distance to the ArUco marker [m]
+z : marker translation forward from the camera in meters
 ```
+
+### ArUcoDistance axis definition
+
+- `x`: right direction in camera frame
+- `y`: down direction in camera frame
+- `z`: forward direction in camera frame
+
+The controller only uses `z` to compute forward/backward motion.
 
 ---
 

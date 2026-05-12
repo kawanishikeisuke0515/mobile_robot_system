@@ -26,7 +26,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'target_z',
-            default_value='0.5',
+            default_value='1.0',
             description='Target distance from the marker in meters',
         ),
         DeclareLaunchArgument(
@@ -36,17 +36,17 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_forward_speed',
-            default_value='0.03',
+            default_value='0.3',
             description='Minimum forward/backward command outside z_tolerance',
         ),
         DeclareLaunchArgument(
             'max_forward_speed',
-            default_value='0.15',
+            default_value='0.95',
             description='Maximum forward/backward command',
         ),
         DeclareLaunchArgument(
             'z_tolerance',
-            default_value='0.03',
+            default_value='0.01',
             description='Distance error tolerance in meters',
         ),
         Node(

@@ -18,9 +18,9 @@ class ArucoDistanceController(Node):
 
         self.declare_parameter('target_z', 1.0)
         self.declare_parameter('kp_z', 1.0)
-        self.declare_parameter('min_forward_speed', 0.10)
-        self.declare_parameter('max_forward_speed', 0.15)
-        self.declare_parameter('z_tolerance', 0.03)
+        self.declare_parameter('min_forward_speed', 0.3)
+        self.declare_parameter('max_forward_speed', 0.95)
+        self.declare_parameter('z_tolerance', 0.01)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
@@ -89,9 +89,9 @@ class ArucoDistanceController(Node):
 
         if self._has_recent_detection():
             self.was_timed_out = False
-            cmd.linear.y = self._calculate_forward_velocity(self.latest_z)
+            cmd.linear.x = self._calculate_forward_velocity(self.latest_z)
         else:
-            cmd.linear.y = 0.0
+            cmd.linear.x = 0.0
             if not self.was_timed_out:
                 self.get_logger().warn('ArUco detection timed out; stopping robot')
                 self.was_timed_out = True
