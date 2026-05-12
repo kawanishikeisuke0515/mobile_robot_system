@@ -12,6 +12,11 @@ def generate_launch_description():
     min_forward_speed = LaunchConfiguration('min_forward_speed')
     max_forward_speed = LaunchConfiguration('max_forward_speed')
     z_tolerance = LaunchConfiguration('z_tolerance')
+    target_x = LaunchConfiguration('target_x')
+    kp_x = LaunchConfiguration('kp_x')
+    min_lateral_speed = LaunchConfiguration('min_lateral_speed')
+    max_lateral_speed = LaunchConfiguration('max_lateral_speed')
+    x_tolerance = LaunchConfiguration('x_tolerance')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -46,8 +51,33 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'z_tolerance',
-            default_value='0.01',
+            default_value='0.03',
             description='Distance error tolerance in meters',
+        ),
+        DeclareLaunchArgument(
+            'target_x',
+            default_value='0.0',
+            description='Target lateral marker offset in meters',
+        ),
+        DeclareLaunchArgument(
+            'kp_x',
+            default_value='1.0',
+            description='Proportional gain for lateral alignment control',
+        ),
+        DeclareLaunchArgument(
+            'min_lateral_speed',
+            default_value='0.3',
+            description='Minimum lateral command outside x_tolerance',
+        ),
+        DeclareLaunchArgument(
+            'max_lateral_speed',
+            default_value='0.95',
+            description='Maximum lateral command',
+        ),
+        DeclareLaunchArgument(
+            'x_tolerance',
+            default_value='0.03',
+            description='Lateral error tolerance in meters',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -70,6 +100,11 @@ def generate_launch_description():
                 'min_forward_speed': min_forward_speed,
                 'max_forward_speed': max_forward_speed,
                 'z_tolerance': z_tolerance,
+                'target_x': target_x,
+                'kp_x': kp_x,
+                'min_lateral_speed': min_lateral_speed,
+                'max_lateral_speed': max_lateral_speed,
+                'x_tolerance': x_tolerance,
             }],
         ),
         Node(

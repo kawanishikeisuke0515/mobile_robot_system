@@ -20,7 +20,12 @@ class ArucoDistanceController(Node):
         self.declare_parameter('kp_z', 1.0)
         self.declare_parameter('min_forward_speed', 0.3)
         self.declare_parameter('max_forward_speed', 0.95)
-        self.declare_parameter('z_tolerance', 0.01)
+        self.declare_parameter('z_tolerance', 0.03)
+        self.declare_parameter('target_x', 0.0)
+        self.declare_parameter('kp_x', 1.0)
+        self.declare_parameter('min_lateral_speed', 0.3)
+        self.declare_parameter('max_lateral_speed', 0.95)
+        self.declare_parameter('x_tolerance', 0.03)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
@@ -29,11 +34,17 @@ class ArucoDistanceController(Node):
         self.min_forward_speed = float(self.get_parameter('min_forward_speed').value)
         self.max_forward_speed = float(self.get_parameter('max_forward_speed').value)
         self.z_tolerance = float(self.get_parameter('z_tolerance').value)
+        self.target_x = float(self.get_parameter('target_x').value)
+        self.kp_x = float(self.get_parameter('kp_x').value)
+        self.min_lateral_speed = float(self.get_parameter('min_lateral_speed').value)
+        self.max_lateral_speed = float(self.get_parameter('max_lateral_speed').value)
+        self.x_tolerance = float(self.get_parameter('x_tolerance').value)
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
 
         self._validate_parameters()
 
+        self.latest_x: Optional[float] = None
         self.latest_z: Optional[float] = None
         self.last_detection_time: Optional[Time] = None
         self.was_timed_out = True
@@ -51,16 +62,22 @@ class ArucoDistanceController(Node):
         )
 
         self.get_logger().info('subscribing to /aruco/distance')
-        self.get_logger().info('publishing forward/backward commands on /rov_cmd_vel')
+        self.get_logger().info('publishing forward/backward and lateral commands on /rov_cmd_vel')
         self.get_logger().info(
             'target_z=%.3f kp_z=%.3f min_forward_speed=%.3f max_forward_speed=%.3f '
-            'z_tolerance=%.3f detection_timeout=%.3f control_rate=%.1f'
+            'z_tolerance=%.3f target_x=%.3f kp_x=%.3f min_lateral_speed=%.3f '
+            'max_lateral_speed=%.3f x_tolerance=%.3f detection_timeout=%.3f control_rate=%.1f'
             % (
                 self.target_z,
                 self.kp_z,
                 self.min_forward_speed,
                 self.max_forward_speed,
                 self.z_tolerance,
+                self.target_x,
+                self.kp_x,
+                self.min_lateral_speed,
+                self.max_lateral_speed,
+                self.x_tolerance,
                 self.detection_timeout,
                 self.control_rate,
             )
@@ -75,12 +92,21 @@ class ArucoDistanceController(Node):
             raise ValueError('min_forward_speed must be less than or equal to max_forward_speed')
         if self.z_tolerance < 0.0:
             raise ValueError('z_tolerance must be greater than or equal to 0')
+        if self.min_lateral_speed < 0.0:
+            raise ValueError('min_lateral_speed must be greater than or equal to 0')
+        if self.max_lateral_speed < 0.0:
+            raise ValueError('max_lateral_speed must be greater than or equal to 0')
+        if self.min_lateral_speed > self.max_lateral_speed:
+            raise ValueError('min_lateral_speed must be less than or equal to max_lateral_speed')
+        if self.x_tolerance < 0.0:
+            raise ValueError('x_tolerance must be greater than or equal to 0')
         if self.detection_timeout <= 0.0:
             raise ValueError('detection_timeout must be greater than 0')
         if self.control_rate <= 0.0:
             raise ValueError('control_rate must be greater than 0')
 
     def distance_callback(self, msg: ArucoDistance):
+        self.latest_x = float(msg.x)
         self.latest_z = float(msg.z)
         self.last_detection_time = self.get_clock().now()
 
@@ -90,8 +116,10 @@ class ArucoDistanceController(Node):
         if self._has_recent_detection():
             self.was_timed_out = False
             cmd.linear.x = self._calculate_forward_velocity(self.latest_z)
+            cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
         else:
             cmd.linear.x = 0.0
+            cmd.linear.y = 0.0
             if not self.was_timed_out:
                 self.get_logger().warn('ArUco detection timed out; stopping robot')
                 self.was_timed_out = True
@@ -99,7 +127,7 @@ class ArucoDistanceController(Node):
         self.cmd_publisher.publish(cmd)
 
     def _has_recent_detection(self) -> bool:
-        if self.latest_z is None or self.last_detection_time is None:
+        if self.latest_x is None or self.latest_z is None or self.last_detection_time is None:
             return False
 
         elapsed = self.get_clock().now() - self.last_detection_time
@@ -118,6 +146,22 @@ class ArucoDistanceController(Node):
         )
         if 0.0 < abs(velocity) < self.min_forward_speed:
             velocity = self.min_forward_speed if velocity > 0.0 else -self.min_forward_speed
+
+        return velocity
+
+    def _calculate_lateral_velocity(self, aruco_x: float) -> float:
+        error_x = aruco_x - self.target_x
+        if abs(error_x) < self.x_tolerance:
+            return 0.0
+
+        velocity = self.kp_x * error_x
+        velocity = _clamp(
+            velocity,
+            -self.max_lateral_speed,
+            self.max_lateral_speed,
+        )
+        if 0.0 < abs(velocity) < self.min_lateral_speed:
+            velocity = self.min_lateral_speed if velocity > 0.0 else -self.min_lateral_speed
 
         return velocity
 

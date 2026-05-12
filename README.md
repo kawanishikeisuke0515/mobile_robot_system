@@ -96,6 +96,9 @@ cmd.linear.x = forward_cmd   # based on ArUco z
 cmd.linear.y = lateral_cmd   # based on ArUco x
 cmd.angular.z = yaw_cmd      # based on ArUco theta
 
+The current controller uses `linear.x` and `linear.y`. Yaw control is reserved
+for future work.
+
 ## Camera Calibration
 - Left calibration file path when running from source:
   `src/aruco_distance_publisher/aruco_distance_publisher/distance_publisher/calib_result_left.npz`
