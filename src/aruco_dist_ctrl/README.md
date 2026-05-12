@@ -55,7 +55,7 @@ type: geometry_msgs/msg/Twist
 ### Used Field
 
 ```
-linear.y : forward/backward velocity [m/s]
+linear.x : forward/backward velocity [m/s]
 ```
 
 This topic is consumed by `locomotion_core/rover_velocity`.
@@ -73,7 +73,7 @@ error_z = aruco_z - target_z
 ### Control Law (P Control)
 
 ```
-cmd.linear.y = Kp_z * error_z
+cmd.linear.x = Kp_z * error_z
 ```
 
 ---
@@ -93,7 +93,7 @@ aruco_z < target_z  → robot moves backward
 
 ```
 if abs(error_z) < z_tolerance:
-    cmd.linear.y = 0.0
+    cmd.linear.x = 0.0
 ```
 
 ---
@@ -103,7 +103,7 @@ if abs(error_z) < z_tolerance:
 If no ArUco message is received for a specified duration:
 
 ```
-cmd.linear.y = 0.0
+cmd.linear.x = 0.0
 ```
 
 ---
@@ -111,7 +111,7 @@ cmd.linear.y = 0.0
 ### 3. Velocity Limitation
 
 ```
-cmd.linear.y = clamp(cmd.linear.y,
+cmd.linear.x = clamp(cmd.linear.x,
                      -max_forward_speed,
                      +max_forward_speed)
 ```
@@ -122,8 +122,8 @@ If the robot is outside `z_tolerance`, the command keeps at least
 `min_forward_speed` while preserving the direction.
 
 ```
-if 0.0 < abs(cmd.linear.y) < min_forward_speed:
-    cmd.linear.y = sign(cmd.linear.y) * min_forward_speed
+if 0.0 < abs(cmd.linear.x) < min_forward_speed:
+    cmd.linear.x = sign(cmd.linear.x) * min_forward_speed
 ```
 
 ---
@@ -131,11 +131,11 @@ if 0.0 < abs(cmd.linear.y) < min_forward_speed:
 ## Parameters
 
 ```yaml
-target_z: 0.5               # target distance [m]
-kp_z: 0.4                  # proportional gain
-min_forward_speed: 0.03    # minimum moving speed outside tolerance [m/s]
-max_forward_speed: 0.15    # maximum speed [m/s]
-z_tolerance: 0.03          # acceptable error [m]
+target_z: 1.0              # target distance [m]
+kp_z: 1.0                  # proportional gain
+min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
+max_forward_speed: 0.95    # maximum speed [m/s]
+z_tolerance: 0.01          # acceptable error [m]
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -196,5 +196,5 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 
 * Validate forward/backward motion
 * Tune `kp_z` and speed limits
-* Add lateral control (`linear.x`)
+* Add lateral control (`linear.y`)
 * Introduce state machine (TRACKING / REACHED / LOST)

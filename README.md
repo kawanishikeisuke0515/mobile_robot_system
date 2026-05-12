@@ -78,6 +78,23 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
   - z
   - distance
   - theta
+  
+### Required mapping
+
+In this system, robot forward motion is represented by `linear.x`.
+
+Therefore, ArUco camera-frame values must be remapped before publishing
+robot velocity commands:
+
+- ArUco `z` → robot `linear.x` forward/backward motion
+- ArUco `x` → robot `linear.y` lateral motion
+- ArUco `theta` → robot `angular.z` yaw motion
+
+Example:
+
+cmd.linear.x = forward_cmd   # based on ArUco z
+cmd.linear.y = lateral_cmd   # based on ArUco x
+cmd.angular.z = yaw_cmd      # based on ArUco theta
 
 ## Camera Calibration
 - Left calibration file path when running from source:
