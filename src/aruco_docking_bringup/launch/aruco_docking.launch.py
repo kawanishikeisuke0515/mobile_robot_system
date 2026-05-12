@@ -17,6 +17,11 @@ def generate_launch_description():
     min_lateral_speed = LaunchConfiguration('min_lateral_speed')
     max_lateral_speed = LaunchConfiguration('max_lateral_speed')
     x_tolerance = LaunchConfiguration('x_tolerance')
+    target_yaw = LaunchConfiguration('target_yaw')
+    kp_yaw = LaunchConfiguration('kp_yaw')
+    min_angular_speed = LaunchConfiguration('min_angular_speed')
+    max_angular_speed = LaunchConfiguration('max_angular_speed')
+    yaw_tolerance = LaunchConfiguration('yaw_tolerance')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -79,6 +84,31 @@ def generate_launch_description():
             default_value='0.03',
             description='Lateral error tolerance in meters',
         ),
+        DeclareLaunchArgument(
+            'target_yaw',
+            default_value='0.0',
+            description='Target marker yaw angle in radians',
+        ),
+        DeclareLaunchArgument(
+            'kp_yaw',
+            default_value='1.0',
+            description='Proportional gain for yaw alignment control',
+        ),
+        DeclareLaunchArgument(
+            'min_angular_speed',
+            default_value='0.1',
+            description='Minimum yaw command outside yaw_tolerance',
+        ),
+        DeclareLaunchArgument(
+            'max_angular_speed',
+            default_value='0.5',
+            description='Maximum yaw command',
+        ),
+        DeclareLaunchArgument(
+            'yaw_tolerance',
+            default_value='0.05',
+            description='Yaw error tolerance in radians',
+        ),
         Node(
             package='aruco_distance_publisher',
             executable='aruco_distance_publisher',
@@ -105,6 +135,11 @@ def generate_launch_description():
                 'min_lateral_speed': min_lateral_speed,
                 'max_lateral_speed': max_lateral_speed,
                 'x_tolerance': x_tolerance,
+                'target_yaw': target_yaw,
+                'kp_yaw': kp_yaw,
+                'min_angular_speed': min_angular_speed,
+                'max_angular_speed': max_angular_speed,
+                'yaw_tolerance': yaw_tolerance,
             }],
         ),
         Node(

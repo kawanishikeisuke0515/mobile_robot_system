@@ -78,6 +78,7 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
   - z
   - distance
   - theta
+  - yaw
   
 ### Required mapping
 
@@ -88,16 +89,15 @@ robot velocity commands:
 
 - ArUco `z` → robot `linear.x` forward/backward motion
 - ArUco `x` → robot `linear.y` lateral motion
-- ArUco `theta` → robot `angular.z` yaw motion
+- ArUco `yaw` → robot `angular.z` yaw motion
 
 Example:
 
 cmd.linear.x = forward_cmd   # based on ArUco z
 cmd.linear.y = lateral_cmd   # based on -ArUco x
-cmd.angular.z = yaw_cmd      # based on ArUco theta
+cmd.angular.z = yaw_cmd      # based on ArUco yaw
 
-The current controller uses `linear.x` and `linear.y`. Yaw control is reserved
-for future work.
+The current controller uses `linear.x`, `linear.y`, and `angular.z`.
 
 ## Camera Calibration
 - Left calibration file path when running from source:
@@ -127,6 +127,7 @@ for future work.
    - x, y, z = tvec
    - distance = sqrt(x^2 + y^2 + z^2)
    - theta = atan2(x, z)
+   - yaw = marker orientation angle from rvec
 8. Publish result to ROS2 topic
 
 ## Error Handling

@@ -38,6 +38,18 @@ def _open_camera():
     return None, None
 
 
+def _marker_yaw_from_rvec(rvec) -> float:
+    rotation_matrix, _ = cv2.Rodrigues(rvec)
+    marker_z_axis = rotation_matrix[:, 2]
+
+    # Use the marker plane normal to estimate yaw around the camera Y axis.
+    # When the marker faces the camera, OpenCV may report the normal along
+    # either camera +Z or -Z depending on marker coordinate convention, so use
+    # the normal direction that makes the front-facing pose yaw close to zero.
+    z_axis_reference = -marker_z_axis[2] if marker_z_axis[2] < 0.0 else marker_z_axis[2]
+    return math.atan2(float(marker_z_axis[0]), float(z_axis_reference))
+
+
 class ArucoDistancePublisher(Node):
     def __init__(self):
         super().__init__("aruco_distance_publisher")
@@ -119,7 +131,7 @@ class ArucoDistancePublisher(Node):
         if ids is None:
             return
 
-        _, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
+        rvecs, tvecs, _ = cv2.aruco.estimatePoseSingleMarkers(
             corners,
             self.marker_length,
             self.camera_matrix,
@@ -127,6 +139,7 @@ class ArucoDistancePublisher(Node):
         )
 
         for i, marker_id in enumerate(ids.flatten()):
+            rvec = rvecs[i][0]
             tvec = tvecs[i][0]
             # OpenCV camera coordinate frame:
             # x = right, y = down, z = forward
@@ -135,10 +148,11 @@ class ArucoDistancePublisher(Node):
             z_m = float(tvec[2])
             distance_m = math.sqrt(x_m * x_m + y_m * y_m + z_m * z_m)
             theta_rad = math.atan2(x_m, z_m)
+            yaw_rad = _marker_yaw_from_rvec(rvec)
 
             self.get_logger().info(
                 f"id={int(marker_id)} x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} "
-                f"d={distance_m:.3f} theta={theta_rad:.3f}"
+                f"d={distance_m:.3f} theta={theta_rad:.3f} yaw={yaw_rad:.3f}"
             )
 
             msg = ArucoDistance()
@@ -148,6 +162,7 @@ class ArucoDistancePublisher(Node):
             msg.z = z_m
             msg.distance = distance_m
             msg.theta = theta_rad
+            msg.yaw = yaw_rad
             self.publisher_.publish(msg)
 
 def main(args=None):

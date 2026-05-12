@@ -4,3 +4,4 @@ float32 y
 float32 z
 float32 distance
 float32 theta
+float64 yaw

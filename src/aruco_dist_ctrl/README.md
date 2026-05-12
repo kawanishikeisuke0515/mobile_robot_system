@@ -2,9 +2,9 @@
 
 ## Overview
 
-This node controls the robot's forward/backward and lateral motion based on the distance to an ArUco marker.
+This node controls the robot's forward/backward, lateral, and yaw motion based on the distance to an ArUco marker.
 
-The objective is to move the robot to a specified target distance and lateral offset using proportional (P) control.
+The objective is to move the robot to a specified target distance, lateral offset, and marker yaw using proportional (P) control.
 
 ---
 
@@ -34,6 +34,7 @@ type: aruco_interfaces/msg/ArucoDistance
 ```
 x : marker translation right from the camera in meters
 z : marker translation forward from the camera in meters
+yaw : marker orientation angle from rvec in radians
 ```
 
 ### ArUcoDistance axis definition
@@ -42,7 +43,7 @@ z : marker translation forward from the camera in meters
 - `y`: down direction in camera frame
 - `z`: forward direction in camera frame
 
-The controller uses `z` to compute forward/backward motion and `x` to compute lateral motion.
+The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `yaw` to compute angular motion.
 
 ---
 
@@ -58,6 +59,7 @@ type: geometry_msgs/msg/Twist
 ```
 linear.x : forward/backward velocity [m/s]
 linear.y : lateral velocity [m/s]
+angular.z : yaw velocity [rad/s]
 ```
 
 This topic is consumed by `locomotion_core/rover_velocity`.
@@ -71,6 +73,7 @@ This topic is consumed by `locomotion_core/rover_velocity`.
 ```
 error_z = aruco_z - target_z
 error_x = aruco_x - target_x
+error_yaw = wrap_pi(aruco_yaw - target_yaw)
 ```
 
 ### Control Law (P Control)
@@ -78,6 +81,7 @@ error_x = aruco_x - target_x
 ```
 cmd.linear.x = Kp_z * error_z
 cmd.linear.y = -Kp_x * error_x
+cmd.angular.z = -Kp_yaw * error_yaw
 ```
 
 ---
@@ -89,6 +93,8 @@ aruco_z > target_z  → robot moves forward
 aruco_z < target_z  → robot moves backward
 aruco_x > target_x  → robot moves in negative lateral direction
 aruco_x < target_x  → robot moves in positive lateral direction
+aruco_yaw > target_yaw  → robot rotates in negative yaw direction
+aruco_yaw < target_yaw  → robot rotates in positive yaw direction
 ```
 
 ---
@@ -102,6 +108,8 @@ if abs(error_z) < z_tolerance:
     cmd.linear.x = 0.0
 if abs(error_x) < x_tolerance:
     cmd.linear.y = 0.0
+if abs(error_yaw) < yaw_tolerance:
+    cmd.angular.z = 0.0
 ```
 
 ---
@@ -113,6 +121,7 @@ If no ArUco message is received for a specified duration:
 ```
 cmd.linear.x = 0.0
 cmd.linear.y = 0.0
+cmd.angular.z = 0.0
 ```
 
 ---
@@ -126,19 +135,25 @@ cmd.linear.x = clamp(cmd.linear.x,
 cmd.linear.y = clamp(cmd.linear.y,
                      -max_lateral_speed,
                      +max_lateral_speed)
+cmd.angular.z = clamp(cmd.angular.z,
+                      -max_angular_speed,
+                      +max_angular_speed)
 ```
 
 ### 4. Minimum Moving Speed
 
 If the robot is outside `z_tolerance`, the command keeps at least
 `min_forward_speed`. If the robot is outside `x_tolerance`, the command
-keeps at least `min_lateral_speed`. Both preserve the command direction.
+keeps at least `min_lateral_speed`. If the robot is outside `yaw_tolerance`,
+the command keeps at least `min_angular_speed`. All preserve the command direction.
 
 ```
 if 0.0 < abs(cmd.linear.x) < min_forward_speed:
     cmd.linear.x = sign(cmd.linear.x) * min_forward_speed
 if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
     cmd.linear.y = sign(cmd.linear.y) * min_lateral_speed
+if 0.0 < abs(cmd.angular.z) < min_angular_speed:
+    cmd.angular.z = sign(cmd.angular.z) * min_angular_speed
 ```
 
 ---
@@ -156,6 +171,11 @@ kp_x: 1.0                  # lateral proportional gain
 min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
 x_tolerance: 0.03          # acceptable lateral error [m]
+target_yaw: 0.0            # target marker yaw [rad]
+kp_yaw: 1.0                # yaw proportional gain
+min_angular_speed: 0.1     # minimum yaw speed outside tolerance [rad/s]
+max_angular_speed: 0.5     # maximum yaw speed [rad/s]
+yaw_tolerance: 0.05        # acceptable yaw error [rad]
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -197,6 +217,7 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 
 * Distance-based forward/backward control
 * Lateral alignment control
+* Yaw alignment control
 * Proportional (P) control
 * Safety stop (tolerance & timeout)
 
@@ -204,7 +225,6 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 
 ## Out of Scope (Future Work)
 
-* Angular control
 * PID control
 * Multi-marker handling
 * Obstacle avoidance
@@ -217,4 +237,5 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 * Validate forward/backward motion
 * Tune `kp_z` and speed limits
 * Validate lateral motion direction
+* Validate yaw motion direction
 * Introduce state machine (TRACKING / REACHED / LOST)
