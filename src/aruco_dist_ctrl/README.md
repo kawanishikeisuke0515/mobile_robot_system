@@ -77,7 +77,7 @@ error_x = aruco_x - target_x
 
 ```
 cmd.linear.x = Kp_z * error_z
-cmd.linear.y = Kp_x * error_x
+cmd.linear.y = -Kp_x * error_x
 ```
 
 ---
@@ -87,8 +87,8 @@ cmd.linear.y = Kp_x * error_x
 ```
 aruco_z > target_z  → robot moves forward
 aruco_z < target_z  → robot moves backward
-aruco_x > target_x  → robot moves in positive lateral direction
-aruco_x < target_x  → robot moves in negative lateral direction
+aruco_x > target_x  → robot moves in negative lateral direction
+aruco_x < target_x  → robot moves in positive lateral direction
 ```
 
 ---

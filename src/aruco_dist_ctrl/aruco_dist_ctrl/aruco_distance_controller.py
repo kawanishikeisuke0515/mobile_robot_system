@@ -154,7 +154,7 @@ class ArucoDistanceController(Node):
         if abs(error_x) < self.x_tolerance:
             return 0.0
 
-        velocity = self.kp_x * error_x
+        velocity = -self.kp_x * error_x
         velocity = _clamp(
             velocity,
             -self.max_lateral_speed,

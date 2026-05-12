@@ -93,7 +93,7 @@ robot velocity commands:
 Example:
 
 cmd.linear.x = forward_cmd   # based on ArUco z
-cmd.linear.y = lateral_cmd   # based on ArUco x
+cmd.linear.y = lateral_cmd   # based on -ArUco x
 cmd.angular.z = yaw_cmd      # based on ArUco theta
 
 The current controller uses `linear.x` and `linear.y`. Yaw control is reserved
