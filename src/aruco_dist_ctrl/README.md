@@ -211,6 +211,31 @@ ros2 run aruco_dist_ctrl aruco_distance_controller
 ros2 launch aruco_docking_bringup aruco_docking.launch.py
 ```
 
+## Logging ArUco and Command Velocity
+
+Run this logger during experiments to save `/aruco/distance` and `/rov_cmd_vel`
+into one time-aligned CSV file.
+
+```bash
+ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
+  -p output_dir:=/tmp/aruco_docking_logs \
+  -p log_rate:=20.0
+```
+
+The logger writes:
+
+```text
+aruco_cmd_log_<timestamp>.csv
+```
+
+Main columns:
+
+```text
+elapsed_sec, aruco_age_sec, cmd_age_sec,
+aruco_id, aruco_x, aruco_y, aruco_z, aruco_distance, aruco_theta, aruco_yaw,
+cmd_linear_x, cmd_linear_y, cmd_angular_z
+```
+
 ---
 
 ## Scope (v0.1)

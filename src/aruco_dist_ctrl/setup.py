@@ -21,6 +21,7 @@ setup(
     entry_points={
         'console_scripts': [
             'aruco_distance_controller = aruco_dist_ctrl.aruco_distance_controller:main',
+            'aruco_cmd_logger = aruco_dist_ctrl.aruco_cmd_logger:main',
         ],
     },
 )
