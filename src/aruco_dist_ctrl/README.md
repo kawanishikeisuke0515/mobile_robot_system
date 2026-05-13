@@ -81,7 +81,7 @@ error_yaw = wrap_pi(aruco_yaw - target_yaw)
 ```
 cmd.linear.x = Kp_z * error_z
 cmd.linear.y = -Kp_x * error_x
-cmd.angular.z = -Kp_yaw * error_yaw
+cmd.angular.z = Kp_yaw * error_yaw
 ```
 
 ---
@@ -93,8 +93,8 @@ aruco_z > target_z  → robot moves forward
 aruco_z < target_z  → robot moves backward
 aruco_x > target_x  → robot moves in negative lateral direction
 aruco_x < target_x  → robot moves in positive lateral direction
-aruco_yaw > target_yaw  → robot rotates in negative yaw direction
-aruco_yaw < target_yaw  → robot rotates in positive yaw direction
+aruco_yaw > target_yaw  → robot rotates in positive yaw direction
+aruco_yaw < target_yaw  → robot rotates in negative yaw direction
 ```
 
 ---

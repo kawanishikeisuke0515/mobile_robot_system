@@ -193,7 +193,7 @@ class ArucoDistanceController(Node):
         if abs(error_yaw) < self.yaw_tolerance:
             return 0.0
 
-        velocity = -self.kp_yaw * error_yaw
+        velocity = self.kp_yaw * error_yaw
         velocity = _clamp(
             velocity,
             -self.max_angular_speed,
