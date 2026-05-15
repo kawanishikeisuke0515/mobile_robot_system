@@ -18,6 +18,7 @@ on distance to the marker:
 ```text
 far from marker:   forward + weak marker-centering yaw
 near marker:       allow lateral and yaw correction
+marker near edge:  stop translation and recover visibility by yaw only
 final distance:    stop
 ```
 
@@ -35,7 +36,8 @@ In scope:
 - Keep the marker visible during docking.
 - Avoid collision with the docking station.
 - Avoid unstable yaw-plus-forward behavior.
-- Stop safely on marker timeout or visibility risk.
+- Stop safely on marker timeout or non-recoverable visibility risk.
+- Recover from horizontal visibility risk without driving forward.
 ```
 
 Out of scope for this controller:
@@ -187,7 +189,7 @@ Twist.linear.y   lateral motion
 Twist.angular.z  yaw rotation
 ```
 
-## Visibility Guard
+## Visibility Guard And Recovery
 
 The marker must remain visible throughout docking. The controller computes:
 
@@ -203,16 +205,23 @@ useful as a warning that the marker may leave the camera view.
 Suggested guard behavior:
 
 ```text
-if abs(theta_x) > theta_x_stop_limit or abs(theta_y) > theta_y_stop_limit:
-    stop forward motion
-    allow only a conservative recovery command or stop
+if abs(theta_x) > theta_x_stop_limit:
+    transition to RECOVER_VISIBILITY
+
+if abs(theta_y) > theta_y_stop_limit:
+    transition to HOLD
 
 if abs(theta_x) > theta_x_slow_limit or abs(theta_y) > theta_y_slow_limit:
     reduce forward speed
 ```
 
-The first implementation can simply stop when the stop limit is exceeded. A
-later implementation can add a dedicated recovery state.
+Horizontal offset is recoverable by yaw rotation because rotating the robot can
+bring the marker back toward the image center. Vertical offset is not directly
+recoverable by this rover, so `theta_y` stop-limit violations remain a stop
+condition.
+
+`RECOVER_VISIBILITY` must not command forward or lateral motion. It should only
+rotate in place until `theta_x` returns to a safe range.
 
 ## States
 
@@ -272,7 +281,8 @@ Transitions:
 ```text
 aruco_z <= minimum_safe_z -> HOLD or DOCKED
 aruco_distance <= align_distance -> NEAR_ALIGN
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
 
@@ -320,7 +330,8 @@ abs(lateral_error) < x_tolerance
 and abs(yaw_error) < yaw_tolerance -> FINAL_APPROACH
 
 aruco_distance > align_distance + align_hysteresis -> FAR_GUIDED_APPROACH
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
 
@@ -363,9 +374,56 @@ if abs(lateral_error) > final_x_realign_threshold
 or abs(yaw_error) > final_yaw_realign_threshold:
     return to NEAR_ALIGN
 
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
+
+### RECOVER_VISIBILITY
+
+Recover when the marker is near the horizontal edge of the camera view.
+
+This state exists because stopping forever on horizontal visibility risk is too
+conservative. If the marker is still detected, the robot can often recover by
+rotating in place toward the marker center. This state must not drive forward or
+sideways.
+
+Command:
+
+```text
+linear.x = 0.0
+linear.y = 0.0
+angular.z = clamp_with_min(kp_visibility_recovery * theta_x,
+                           min_visibility_recovery_speed,
+                           max_visibility_recovery_speed)
+```
+
+The command direction should preserve the sign of `theta_x`. If the sign is
+reversed in real-robot tests, invert the recovery command before tuning gains.
+
+Transitions:
+
+```text
+aruco_z <= minimum_safe_z
+and docked condition is true -> DOCKED
+
+aruco_z <= minimum_safe_z
+and docked condition is not true -> HOLD
+
+abs(theta_y) > theta_y_stop_limit -> HOLD
+
+abs(theta_x) < theta_x_slow_limit
+and aruco_distance <= align_distance -> NEAR_ALIGN
+
+abs(theta_x) < theta_x_slow_limit
+and aruco_distance > align_distance -> FAR_GUIDED_APPROACH
+
+marker lost -> WAIT_FOR_MARKER
+```
+
+`RECOVER_VISIBILITY` should use hysteresis. Enter on `theta_x_stop_limit`, but
+leave only after `theta_x` is below `theta_x_slow_limit`. This avoids rapid
+switching near the stop threshold.
 
 ### HOLD
 
@@ -469,6 +527,7 @@ theta_y_stop_limit: 0.25
 kp_lateral: 0.4
 kp_yaw: 0.6
 kp_far_center: 0.3
+kp_visibility_recovery: 0.3
 
 far_approach_speed: 0.3
 reduced_far_approach_speed: 0.3
@@ -476,6 +535,8 @@ final_approach_speed: 0.3
 back_out_speed: 0.05
 min_far_center_speed: 0.3
 max_far_center_speed: 0.95
+min_visibility_recovery_speed: 0.3
+max_visibility_recovery_speed: 0.95
 min_lateral_align_speed: 0.3
 max_lateral_align_speed: 0.95
 min_yaw_align_speed: 0.3
@@ -499,6 +560,9 @@ control_rate: 20.0
 - Use lower speed in `FINAL_APPROACH` than in `FAR_GUIDED_APPROACH`.
 - Do not command forward motion during `NEAR_ALIGN` in the first implementation.
 - Treat visibility guard violations as higher priority than pose alignment.
+- On horizontal visibility risk, use `RECOVER_VISIBILITY` with yaw only.
+- On vertical visibility risk, stop in `HOLD`.
+- Do not command forward or lateral motion during `RECOVER_VISIBILITY`.
 - Keep `HOLD` bounded; after `hold_duration`, either resume a valid state or
   return to `WAIT_FOR_MARKER`.
 - Log `/aruco/distance` and `/rov_cmd_vel` during each experiment.
@@ -519,7 +583,8 @@ Minimum experiments:
 1. FAR_GUIDED_APPROACH only
 2. FAR_GUIDED_APPROACH + NEAR_ALIGN, with linear.x disabled in NEAR_ALIGN
 3. Add FINAL_APPROACH to 1.0 m
-4. If NEAR_ALIGN freezes, split it into lateral-only and yaw-only substates
+4. Force horizontal edge cases and verify RECOVER_VISIBILITY
+5. If NEAR_ALIGN freezes, split it into lateral-only and yaw-only substates
 ```
 
 For each run, note:

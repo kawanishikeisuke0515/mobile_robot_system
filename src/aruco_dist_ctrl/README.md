@@ -70,6 +70,11 @@ WAIT_FOR_MARKER
   -> NEAR_ALIGN
   -> FINAL_APPROACH
   -> DOCKED
+
+Horizontal visibility risk can temporarily route through:
+
+RECOVER_VISIBILITY
+  -> FAR_GUIDED_APPROACH or NEAR_ALIGN
 ```
 
 State behavior:
@@ -92,6 +97,11 @@ FINAL_APPROACH:
   linear.x = final_approach_speed
   linear.y = 0
   angular.z = 0
+
+RECOVER_VISIBILITY:
+  linear.x = 0
+  linear.y = 0
+  angular.z = theta_x recovery yaw
 
 HOLD:
   stop for hold_duration, then resume a valid state or wait for marker
@@ -143,12 +153,15 @@ theta_y_stop_limit: 0.25
 kp_lateral: 0.4
 kp_yaw: 0.6
 kp_far_center: 0.3
+kp_visibility_recovery: 0.3
 
 far_approach_speed: 0.3
 reduced_far_approach_speed: 0.3
 final_approach_speed: 0.3
 min_far_center_speed: 0.3
 max_far_center_speed: 0.95
+min_visibility_recovery_speed: 0.3
+max_visibility_recovery_speed: 0.95
 min_lateral_align_speed: 0.3
 max_lateral_align_speed: 0.95
 min_yaw_align_speed: 0.3

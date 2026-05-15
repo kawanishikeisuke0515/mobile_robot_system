@@ -11,6 +11,7 @@
 ```text
 遠い:     前進 + 弱いマーカー中心合わせyaw
 近い:     横移動とyaw補正を許可
+視野端:   並進を止め、yawだけで視野復帰
 最終距離: 停止
 ```
 
@@ -25,7 +26,8 @@
 - ドッキング中にマーカーを見失わない。
 - ドッキングステーションとの衝突を避ける。
 - yaw + 前進の不安定挙動を避ける。
-- マーカータイムアウトや視野リスク時に安全停止する。
+- マーカータイムアウトや復帰できない視野リスク時に安全停止する。
+- 水平方向の視野リスクから、前進せずに復帰する。
 ```
 
 対象外:
@@ -155,7 +157,7 @@ Twist.linear.y   横移動
 Twist.angular.z  yaw回転
 ```
 
-## 視野ガード
+## 視野ガードと復帰
 
 ドッキング中はマーカーを見失ってはいけない。コントローラは以下を計算する。
 
@@ -169,15 +171,19 @@ theta_y = atan2(aruco_y, aruco_z)
 推奨するガード:
 
 ```text
-if abs(theta_x) > theta_x_stop_limit or abs(theta_y) > theta_y_stop_limit:
-    前進を停止
-    保守的な復帰指令だけ許可、または停止
+if abs(theta_x) > theta_x_stop_limit:
+    RECOVER_VISIBILITY に遷移
+
+if abs(theta_y) > theta_y_stop_limit:
+    HOLD に遷移
 
 if abs(theta_x) > theta_x_slow_limit or abs(theta_y) > theta_y_slow_limit:
     前進速度を落とす
 ```
 
-最初の実装では、stop limitを超えたら単に停止してよい。将来、専用の復帰ステートを追加できる。
+水平方向のズレは、ロボットをyaw回転させることでマーカーを画像中心へ戻せる可能性がある。垂直方向のズレはこのローバーでは直接補正できないため、`theta_y` のstop limit違反は停止条件として扱う。
+
+`RECOVER_VISIBILITY` では前進や横移動を指令してはいけない。`theta_x` が安全な範囲に戻るまで、その場回転だけを使う。
 
 ## ステート
 
@@ -228,7 +234,8 @@ angular.z = clamp(kp_far_center * theta_x,
 ```text
 aruco_z <= minimum_safe_z -> HOLD or DOCKED
 aruco_distance <= align_distance -> NEAR_ALIGN
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
 
@@ -273,7 +280,8 @@ abs(lateral_error) < x_tolerance
 and abs(yaw_error) < yaw_tolerance -> FINAL_APPROACH
 
 aruco_distance > align_distance + align_hysteresis -> FAR_GUIDED_APPROACH
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
 
@@ -312,9 +320,50 @@ if abs(lateral_error) > final_x_realign_threshold
 or abs(yaw_error) > final_yaw_realign_threshold:
     return to NEAR_ALIGN
 
-visibility stop guard violated -> HOLD
+abs(theta_x) > theta_x_stop_limit -> RECOVER_VISIBILITY
+abs(theta_y) > theta_y_stop_limit -> HOLD
 marker lost -> WAIT_FOR_MARKER
 ```
+
+### RECOVER_VISIBILITY
+
+マーカーがカメラ視野の水平方向端に近づいたときに復帰する。
+
+水平視野リスクで永久停止してしまうのは保守的すぎる。マーカーがまだ検出できているなら、その場回転でマーカーを画像中心へ戻せる可能性がある。このステートでは前進も横移動もしない。
+
+指令:
+
+```text
+linear.x = 0.0
+linear.y = 0.0
+angular.z = clamp_with_min(kp_visibility_recovery * theta_x,
+                           min_visibility_recovery_speed,
+                           max_visibility_recovery_speed)
+```
+
+指令方向は `theta_x` の符号を保つ。実機テストで回転方向が逆なら、ゲイン調整より先に復帰指令の符号を反転する。
+
+遷移:
+
+```text
+aruco_z <= minimum_safe_z
+and docked condition is true -> DOCKED
+
+aruco_z <= minimum_safe_z
+and docked condition is not true -> HOLD
+
+abs(theta_y) > theta_y_stop_limit -> HOLD
+
+abs(theta_x) < theta_x_slow_limit
+and aruco_distance <= align_distance -> NEAR_ALIGN
+
+abs(theta_x) < theta_x_slow_limit
+and aruco_distance > align_distance -> FAR_GUIDED_APPROACH
+
+marker lost -> WAIT_FOR_MARKER
+```
+
+`RECOVER_VISIBILITY` にはヒステリシスを持たせる。`theta_x_stop_limit` で入り、`theta_x_slow_limit` 未満になってから抜ける。これによりstop閾値付近での細かい状態切り替えを避ける。
 
 ### HOLD
 
@@ -412,6 +461,7 @@ theta_y_stop_limit: 0.25
 kp_lateral: 0.4
 kp_yaw: 0.6
 kp_far_center: 0.3
+kp_visibility_recovery: 0.3
 
 far_approach_speed: 0.3
 reduced_far_approach_speed: 0.3
@@ -419,6 +469,8 @@ final_approach_speed: 0.3
 back_out_speed: 0.05
 min_far_center_speed: 0.3
 max_far_center_speed: 0.95
+min_visibility_recovery_speed: 0.3
+max_visibility_recovery_speed: 0.95
 min_lateral_align_speed: 0.3
 max_lateral_align_speed: 0.95
 min_yaw_align_speed: 0.3
@@ -439,6 +491,9 @@ control_rate: 20.0
 - `FINAL_APPROACH` の速度は `FAR_GUIDED_APPROACH` より低くする。
 - 最初の実装では `NEAR_ALIGN` 中に前進しない。
 - 視野ガード違反は姿勢合わせより優先する。
+- 水平方向の視野リスクでは、yawだけの `RECOVER_VISIBILITY` を使う。
+- 垂直方向の視野リスクでは `HOLD` で停止する。
+- `RECOVER_VISIBILITY` 中は前進も横移動も指令しない。
 - `HOLD` は有限時間にする。`hold_duration` 後、適切なステートに復帰するか `WAIT_FOR_MARKER` に戻る。
 - 各実験で `/aruco/distance` と `/rov_cmd_vel` を記録する。
 
@@ -458,7 +513,8 @@ ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
 1. FAR_GUIDED_APPROACHのみ
 2. FAR_GUIDED_APPROACH + NEAR_ALIGN。NEAR_ALIGN中はlinear.x無効
 3. FINAL_APPROACHを追加して1.0mまで進む
-4. NEAR_ALIGNでフリーズする場合、横移動専用とyaw専用のサブステートに分ける
+4. 水平方向の視野端ケースを作り、RECOVER_VISIBILITYを確認する
+5. NEAR_ALIGNでフリーズする場合、横移動専用とyaw専用のサブステートに分ける
 ```
 
 各実験で記録すること:

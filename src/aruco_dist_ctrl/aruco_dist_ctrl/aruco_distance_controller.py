@@ -23,6 +23,7 @@ STATE_WAIT_FOR_MARKER = 'WAIT_FOR_MARKER'
 STATE_FAR_GUIDED_APPROACH = 'FAR_GUIDED_APPROACH'
 STATE_NEAR_ALIGN = 'NEAR_ALIGN'
 STATE_FINAL_APPROACH = 'FINAL_APPROACH'
+STATE_RECOVER_VISIBILITY = 'RECOVER_VISIBILITY'
 STATE_HOLD = 'HOLD'
 STATE_DOCKED = 'DOCKED'
 
@@ -50,11 +51,14 @@ class ArucoDistanceController(Node):
         self.declare_parameter('kp_lateral', 0.4)
         self.declare_parameter('kp_yaw', 0.6)
         self.declare_parameter('kp_far_center', 0.3)
+        self.declare_parameter('kp_visibility_recovery', 0.3)
         self.declare_parameter('far_approach_speed', 0.3)
         self.declare_parameter('reduced_far_approach_speed', 0.3)
         self.declare_parameter('final_approach_speed', 0.3)
         self.declare_parameter('min_far_center_speed', 0.3)
         self.declare_parameter('max_far_center_speed', 0.95)
+        self.declare_parameter('min_visibility_recovery_speed', 0.3)
+        self.declare_parameter('max_visibility_recovery_speed', 0.95)
         self.declare_parameter('min_lateral_align_speed', 0.3)
         self.declare_parameter('max_lateral_align_speed', 0.95)
         self.declare_parameter('min_yaw_align_speed', 0.3)
@@ -82,11 +86,14 @@ class ArucoDistanceController(Node):
         self.theta_y_stop_limit = float(self.get_parameter('theta_y_stop_limit').value)
         self.kp_lateral = float(self.get_parameter('kp_lateral').value)
         self.kp_far_center = float(self.get_parameter('kp_far_center').value)
+        self.kp_visibility_recovery = float(self.get_parameter('kp_visibility_recovery').value)
         self.far_approach_speed = float(self.get_parameter('far_approach_speed').value)
         self.reduced_far_approach_speed = float(self.get_parameter('reduced_far_approach_speed').value)
         self.final_approach_speed = float(self.get_parameter('final_approach_speed').value)
         self.min_far_center_speed = float(self.get_parameter('min_far_center_speed').value)
         self.max_far_center_speed = float(self.get_parameter('max_far_center_speed').value)
+        self.min_visibility_recovery_speed = float(self.get_parameter('min_visibility_recovery_speed').value)
+        self.max_visibility_recovery_speed = float(self.get_parameter('max_visibility_recovery_speed').value)
         self.min_lateral_align_speed = float(self.get_parameter('min_lateral_align_speed').value)
         self.max_lateral_align_speed = float(self.get_parameter('max_lateral_align_speed').value)
         self.min_yaw_align_speed = float(self.get_parameter('min_yaw_align_speed').value)
@@ -128,8 +135,8 @@ class ArucoDistanceController(Node):
             'target_z=%.3f z_tolerance=%.3f target_x=%.3f x_tolerance=%.3f '
             'target_yaw=%.3f yaw_tolerance=%.3f far_approach_speed=%.3f '
             'final_approach_speed=%.3f max_lateral_align_speed=%.3f '
-            'max_yaw_align_speed=%.3f detection_timeout=%.3f hold_duration=%.3f '
-            'control_rate=%.1f'
+            'max_yaw_align_speed=%.3f max_visibility_recovery_speed=%.3f '
+            'detection_timeout=%.3f hold_duration=%.3f control_rate=%.1f'
             % (
                 self.target_distance,
                 self.align_distance,
@@ -144,6 +151,7 @@ class ArucoDistanceController(Node):
                 self.final_approach_speed,
                 self.max_lateral_align_speed,
                 self.max_yaw_align_speed,
+                self.max_visibility_recovery_speed,
                 self.detection_timeout,
                 self.hold_duration,
                 self.control_rate,
@@ -183,12 +191,16 @@ class ArucoDistanceController(Node):
             raise ValueError('kp_yaw must be greater than or equal to 0')
         if self.kp_far_center < 0.0:
             raise ValueError('kp_far_center must be greater than or equal to 0')
+        if self.kp_visibility_recovery < 0.0:
+            raise ValueError('kp_visibility_recovery must be greater than or equal to 0')
         for name, value in (
             ('far_approach_speed', self.far_approach_speed),
             ('reduced_far_approach_speed', self.reduced_far_approach_speed),
             ('final_approach_speed', self.final_approach_speed),
             ('min_far_center_speed', self.min_far_center_speed),
             ('max_far_center_speed', self.max_far_center_speed),
+            ('min_visibility_recovery_speed', self.min_visibility_recovery_speed),
+            ('max_visibility_recovery_speed', self.max_visibility_recovery_speed),
             ('min_lateral_align_speed', self.min_lateral_align_speed),
             ('max_lateral_align_speed', self.max_lateral_align_speed),
             ('min_yaw_align_speed', self.min_yaw_align_speed),
@@ -198,6 +210,10 @@ class ArucoDistanceController(Node):
                 raise ValueError('%s must be greater than or equal to 0' % name)
         if self.min_far_center_speed > self.max_far_center_speed:
             raise ValueError('min_far_center_speed must be less than or equal to max_far_center_speed')
+        if self.min_visibility_recovery_speed > self.max_visibility_recovery_speed:
+            raise ValueError(
+                'min_visibility_recovery_speed must be less than or equal to max_visibility_recovery_speed'
+            )
         if self.min_lateral_align_speed > self.max_lateral_align_speed:
             raise ValueError('min_lateral_align_speed must be less than or equal to max_lateral_align_speed')
         if self.min_yaw_align_speed > self.max_yaw_align_speed:
@@ -241,6 +257,8 @@ class ArucoDistanceController(Node):
             cmd = self._run_near_align()
         elif self.state == STATE_FINAL_APPROACH:
             cmd = self._run_final_approach()
+        elif self.state == STATE_RECOVER_VISIBILITY:
+            cmd = self._run_recover_visibility()
         elif self.state == STATE_HOLD:
             cmd = self._run_hold()
         elif self.state == STATE_DOCKED:
@@ -271,6 +289,10 @@ class ArucoDistanceController(Node):
             self._transition_to(STATE_DOCKED, 'already docked')
         elif self._inside_safe_z():
             self._transition_to(STATE_HOLD, 'inside safe z')
+        elif self._vertical_visibility_stop_guard():
+            self._transition_to(STATE_HOLD, 'vertical visibility stop guard')
+        elif self._horizontal_visibility_recovery_needed():
+            self._transition_to(STATE_RECOVER_VISIBILITY, 'horizontal visibility recovery')
         elif self.latest_distance <= self.align_distance:
             self._transition_to(STATE_NEAR_ALIGN, 'inside align distance')
         else:
@@ -284,8 +306,11 @@ class ArucoDistanceController(Node):
         if self._inside_safe_z():
             self._transition_to(STATE_HOLD, 'safe z reached before docked')
             return cmd
-        if self._visibility_stop_guard():
-            self._transition_to(STATE_HOLD, 'visibility stop guard')
+        if self._vertical_visibility_stop_guard():
+            self._transition_to(STATE_HOLD, 'vertical visibility stop guard')
+            return cmd
+        if self._horizontal_visibility_recovery_needed():
+            self._transition_to(STATE_RECOVER_VISIBILITY, 'horizontal visibility recovery')
             return cmd
         if self.latest_distance <= self.align_distance:
             self._transition_to(STATE_NEAR_ALIGN, 'align distance reached')
@@ -307,8 +332,11 @@ class ArucoDistanceController(Node):
         if self._inside_safe_z():
             self._transition_to(STATE_HOLD, 'safe z reached before docked')
             return cmd
-        if self._visibility_stop_guard():
-            self._transition_to(STATE_HOLD, 'visibility stop guard')
+        if self._vertical_visibility_stop_guard():
+            self._transition_to(STATE_HOLD, 'vertical visibility stop guard')
+            return cmd
+        if self._horizontal_visibility_recovery_needed():
+            self._transition_to(STATE_RECOVER_VISIBILITY, 'horizontal visibility recovery')
             return cmd
         if self.latest_distance > self.align_distance + self.align_hysteresis:
             self._transition_to(STATE_FAR_GUIDED_APPROACH, 'outside align hysteresis')
@@ -337,14 +365,42 @@ class ArucoDistanceController(Node):
         if self._inside_safe_z():
             self._transition_to(STATE_HOLD, 'safe z reached before docked')
             return cmd
-        if self._visibility_stop_guard():
-            self._transition_to(STATE_HOLD, 'visibility stop guard')
+        if self._vertical_visibility_stop_guard():
+            self._transition_to(STATE_HOLD, 'vertical visibility stop guard')
+            return cmd
+        if self._horizontal_visibility_recovery_needed():
+            self._transition_to(STATE_RECOVER_VISIBILITY, 'horizontal visibility recovery')
             return cmd
         if self._final_realign_needed():
             self._transition_to(STATE_NEAR_ALIGN, 'final approach drift')
             return cmd
 
         cmd.linear.x = self.final_approach_speed
+        return cmd
+
+    def _run_recover_visibility(self) -> Twist:
+        cmd = Twist()
+        if self._is_docked():
+            self._transition_to(STATE_DOCKED, 'docked')
+            return cmd
+        if self._inside_safe_z():
+            self._transition_to(STATE_HOLD, 'safe z reached before docked')
+            return cmd
+        if self._vertical_visibility_stop_guard():
+            self._transition_to(STATE_HOLD, 'vertical visibility stop guard')
+            return cmd
+        if not self._horizontal_visibility_recovery_active():
+            if self.latest_distance <= self.align_distance:
+                self._transition_to(STATE_NEAR_ALIGN, 'visibility recovered near')
+            else:
+                self._transition_to(STATE_FAR_GUIDED_APPROACH, 'visibility recovered far')
+            return cmd
+
+        cmd.angular.z = self._clamp_with_min(
+            self.kp_visibility_recovery * self._theta_x(),
+            self.min_visibility_recovery_speed,
+            self.max_visibility_recovery_speed,
+        )
         return cmd
 
     def _run_hold(self) -> Twist:
@@ -360,8 +416,10 @@ class ArucoDistanceController(Node):
             self._transition_to(STATE_DOCKED, 'docked after hold')
         elif self._inside_safe_z():
             self.hold_start_time = self.get_clock().now()
-        elif self._visibility_stop_guard():
+        elif self._vertical_visibility_stop_guard():
             self.hold_start_time = self.get_clock().now()
+        elif self._horizontal_visibility_recovery_needed():
+            self._transition_to(STATE_RECOVER_VISIBILITY, 'hold released to visibility recovery')
         elif self.latest_distance <= self.align_distance:
             self._transition_to(STATE_NEAR_ALIGN, 'hold released near')
         else:
@@ -416,8 +474,14 @@ class ArucoDistanceController(Node):
     def _visibility_slow_guard(self) -> bool:
         return abs(self._theta_x()) > self.theta_x_slow_limit or abs(self._theta_y()) > self.theta_y_slow_limit
 
-    def _visibility_stop_guard(self) -> bool:
-        return abs(self._theta_x()) > self.theta_x_stop_limit or abs(self._theta_y()) > self.theta_y_stop_limit
+    def _horizontal_visibility_recovery_needed(self) -> bool:
+        return abs(self._theta_x()) > self.theta_x_stop_limit
+
+    def _horizontal_visibility_recovery_active(self) -> bool:
+        return abs(self._theta_x()) >= self.theta_x_slow_limit
+
+    def _vertical_visibility_stop_guard(self) -> bool:
+        return abs(self._theta_y()) > self.theta_y_stop_limit
 
     def _theta_x(self) -> float:
         if self.latest_theta is not None:

@@ -26,11 +26,14 @@ def generate_launch_description():
     kp_lateral = LaunchConfiguration('kp_lateral')
     kp_yaw = LaunchConfiguration('kp_yaw')
     kp_far_center = LaunchConfiguration('kp_far_center')
+    kp_visibility_recovery = LaunchConfiguration('kp_visibility_recovery')
     far_approach_speed = LaunchConfiguration('far_approach_speed')
     reduced_far_approach_speed = LaunchConfiguration('reduced_far_approach_speed')
     final_approach_speed = LaunchConfiguration('final_approach_speed')
     min_far_center_speed = LaunchConfiguration('min_far_center_speed')
     max_far_center_speed = LaunchConfiguration('max_far_center_speed')
+    min_visibility_recovery_speed = LaunchConfiguration('min_visibility_recovery_speed')
+    max_visibility_recovery_speed = LaunchConfiguration('max_visibility_recovery_speed')
     min_lateral_align_speed = LaunchConfiguration('min_lateral_align_speed')
     max_lateral_align_speed = LaunchConfiguration('max_lateral_align_speed')
     min_yaw_align_speed = LaunchConfiguration('min_yaw_align_speed')
@@ -120,7 +123,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'theta_x_stop_limit',
             default_value='0.25',
-            description='Horizontal visibility angle where controller holds',
+            description='Horizontal visibility angle where RECOVER_VISIBILITY begins',
         ),
         DeclareLaunchArgument(
             'theta_y_slow_limit',
@@ -148,6 +151,11 @@ def generate_launch_description():
             description='Proportional gain for far marker-centering yaw',
         ),
         DeclareLaunchArgument(
+            'kp_visibility_recovery',
+            default_value='0.3',
+            description='Proportional gain for RECOVER_VISIBILITY yaw',
+        ),
+        DeclareLaunchArgument(
             'far_approach_speed',
             default_value='0.3',
             description='Forward command in FAR_GUIDED_APPROACH',
@@ -171,6 +179,16 @@ def generate_launch_description():
             'max_far_center_speed',
             default_value='0.95',
             description='Maximum yaw command in FAR_GUIDED_APPROACH',
+        ),
+        DeclareLaunchArgument(
+            'min_visibility_recovery_speed',
+            default_value='0.3',
+            description='Minimum yaw command in RECOVER_VISIBILITY',
+        ),
+        DeclareLaunchArgument(
+            'max_visibility_recovery_speed',
+            default_value='0.95',
+            description='Maximum yaw command in RECOVER_VISIBILITY',
         ),
         DeclareLaunchArgument(
             'min_lateral_align_speed',
@@ -252,11 +270,14 @@ def generate_launch_description():
                 'theta_y_stop_limit': theta_y_stop_limit,
                 'kp_lateral': kp_lateral,
                 'kp_far_center': kp_far_center,
+                'kp_visibility_recovery': kp_visibility_recovery,
                 'far_approach_speed': far_approach_speed,
                 'reduced_far_approach_speed': reduced_far_approach_speed,
                 'final_approach_speed': final_approach_speed,
                 'min_far_center_speed': min_far_center_speed,
                 'max_far_center_speed': max_far_center_speed,
+                'min_visibility_recovery_speed': min_visibility_recovery_speed,
+                'max_visibility_recovery_speed': max_visibility_recovery_speed,
                 'min_lateral_align_speed': min_lateral_align_speed,
                 'max_lateral_align_speed': max_lateral_align_speed,
                 'min_yaw_align_speed': min_yaw_align_speed,
