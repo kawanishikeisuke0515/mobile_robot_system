@@ -8,6 +8,7 @@ from geometry_msgs.msg import Twist
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
 from rclpy.time import Time
+from std_msgs.msg import String
 
 
 def _clamp(value: float, lower: float, upper: float) -> float:
@@ -108,6 +109,7 @@ class ArucoDistanceController(Node):
         self.hold_start_time: Optional[Time] = None
 
         self.cmd_publisher = self.create_publisher(Twist, '/rov_cmd_vel', 10)
+        self.state_publisher = self.create_publisher(String, '/aruco_docking/state', 10)
         self.distance_subscriber = self.create_subscription(
             ArucoDistance,
             '/aruco/distance',
@@ -224,6 +226,7 @@ class ArucoDistanceController(Node):
             if not self.was_timed_out:
                 self.get_logger().warn('ArUco detection timed out; stopping robot')
             self.was_timed_out = True
+            self._publish_state()
             self.cmd_publisher.publish(cmd)
             return
 
@@ -245,6 +248,7 @@ class ArucoDistanceController(Node):
         else:
             self._transition_to(STATE_WAIT_FOR_MARKER, 'unknown state')
 
+        self._publish_state()
         self.cmd_publisher.publish(cmd)
 
     def _has_recent_detection(self) -> bool:
@@ -374,6 +378,11 @@ class ArucoDistanceController(Node):
             self.hold_start_time = self.get_clock().now()
         else:
             self.hold_start_time = None
+
+    def _publish_state(self):
+        msg = String()
+        msg.data = self.state
+        self.state_publisher.publish(msg)
 
     def _clamp_with_min(self, value: float, min_abs: float, max_abs: float) -> float:
         if value == 0.0:

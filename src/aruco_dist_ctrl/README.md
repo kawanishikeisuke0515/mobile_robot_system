@@ -26,6 +26,9 @@ Published:
 ```text
 /rov_cmd_vel
 type: geometry_msgs/msg/Twist
+
+/aruco_docking/state
+type: std_msgs/msg/String
 ```
 
 Used `Twist` fields:
@@ -181,6 +184,12 @@ source install/setup.bash
 ros2 run aruco_distance_publisher aruco_distance_publisher
 ros2 run aruco_dist_ctrl aruco_distance_controller
 ros2 launch aruco_docking_bringup aruco_docking.launch.py
+```
+
+Watch the current docking state in real time:
+
+```bash
+ros2 topic echo /aruco_docking/state
 ```
 
 ## Logging ArUco and Command Velocity
