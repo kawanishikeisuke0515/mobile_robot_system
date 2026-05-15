@@ -1,3 +1,5 @@
+from glob import glob
+
 from setuptools import find_packages, setup
 
 package_name = 'aruco_dist_ctrl'
@@ -10,6 +12,7 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml', 'README.md']),
+        ('share/' + package_name + '/docs', glob('docs/*.md')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

@@ -16,6 +16,11 @@ class get_move_cmds(Node):
     def __init__(self):
         super().__init__('rover_velocity')
 
+        self.declare_parameter('log_motor_commands', False)
+        self.declare_parameter('log_zero_motor_commands', False)
+        self.log_motor_commands = bool(self.get_parameter('log_motor_commands').value)
+        self.log_zero_motor_commands = bool(self.get_parameter('log_zero_motor_commands').value)
+
         # Initialize the rover object to define the rover.
         self.rov = Rover.RoverDescription('RobArm', ((205, 170), 63.5))
 
@@ -45,8 +50,15 @@ class get_move_cmds(Node):
         #briefly changing to 100. rememer to increase back to 600 and multiply by 60
         self.rpm_vec = [max(min(i, 15.0), -15.0) for i in angular_vel_vector]
         #self.rpm_vec = [msg.linear.x, msg.linear.x, msg.linear.x, msg.linear.x]
-        print(self.rpm_vec)
-        self.get_logger().info(f"self.rpm_vec:  {self.rpm_vec}")
+        if self._should_log_motor_commands():
+            self.get_logger().info(f"self.rpm_vec:  {self.rpm_vec}")
+
+    def _should_log_motor_commands(self):
+        if not self.log_motor_commands:
+            return False
+        if self.log_zero_motor_commands:
+            return True
+        return any(abs(value) > 1e-6 for value in self.rpm_vec)
 
     # Publishes to the roboteq controller node.
     def drive_unit_callback(self):

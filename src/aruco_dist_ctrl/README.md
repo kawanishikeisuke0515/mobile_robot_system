@@ -1,186 +1,160 @@
-# ArUco Distance Controller (v0.1)
+# ArUco Distance-Gated Docking Controller
 
 ## Overview
 
-This node controls the robot's forward/backward, lateral, and yaw motion based on the distance to an ArUco marker.
+This package contains the ArUco docking controller and experiment logger.
 
-The objective is to move the robot to a specified target distance, lateral offset, and marker yaw using proportional (P) control.
+`aruco_distance_controller` subscribes to `/aruco/distance` and publishes
+`/rov_cmd_vel`. The controller follows a distance-gated state machine instead
+of commanding forward, lateral, and yaw motion at full strength at the same
+time.
 
----
+The controller is intended for the phase where the robot is already close
+enough for the camera to detect the ArUco marker.
 
-## Node Name
+## Topics
 
-```
-aruco_distance_controller
-```
+Subscribed:
 
-## Package
-
-```
-aruco_dist_ctrl
-```
-
----
-
-## Subscribed Topic
-
-```
+```text
 /aruco/distance
 type: aruco_interfaces/msg/ArucoDistance
 ```
 
-### Expected Field
+Published:
 
-```
-x : marker translation right from the camera in meters
-z : marker translation forward from the camera in meters
-yaw : marker orientation angle from rvec in radians
-```
-
-### ArUcoDistance axis definition
-
-- `x`: right direction in camera frame
-- `y`: down direction in camera frame
-- `z`: forward direction in camera frame
-
-The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `yaw` to compute angular motion.
-
----
-
-## Published Topic
-
-```
+```text
 /rov_cmd_vel
 type: geometry_msgs/msg/Twist
 ```
 
-### Used Field
+Used `Twist` fields:
 
-```
-linear.x : forward/backward velocity [m/s]
-linear.y : lateral velocity [m/s]
-angular.z : yaw velocity [rad/s]
-```
-
-This topic is consumed by `locomotion_core/rover_velocity`.
-
----
-
-## Control Strategy
-
-### Error Definition
-
-```
-error_z = aruco_z - target_z
-error_x = aruco_x - target_x
-error_yaw = wrap_pi(aruco_yaw - target_yaw)
+```text
+linear.x   forward/backward command
+linear.y   lateral command
+angular.z  yaw command
 ```
 
-### Control Law (P Control)
+## Message Fields
 
-```
-cmd.linear.x = Kp_z * error_z
-cmd.linear.y = -Kp_x * error_x
-cmd.angular.z = Kp_yaw * error_yaw
-```
-
----
-
-## Behavior
-
-```
-aruco_z > target_z  → robot moves forward
-aruco_z < target_z  → robot moves backward
-aruco_x > target_x  → robot moves in negative lateral direction
-aruco_x < target_x  → robot moves in positive lateral direction
-aruco_yaw > target_yaw  → robot rotates in positive yaw direction
-aruco_yaw < target_yaw  → robot rotates in negative yaw direction
+```text
+aruco_x        = msg.x
+aruco_y        = msg.y
+aruco_z        = msg.z, forward-axis distance
+aruco_distance = msg.distance, sqrt(x^2 + y^2 + z^2)
+aruco_theta    = msg.theta, atan2(x, z)
+aruco_yaw      = msg.yaw
 ```
 
----
+State transitions use `aruco_distance` for approach gating. Collision safety
+uses `aruco_z`.
 
-## Safety Mechanisms
+## State Machine
 
-### 1. Target Reached Condition
+Detailed design:
 
-```
-if abs(error_z) < z_tolerance:
-    cmd.linear.x = 0.0
-if abs(error_x) < x_tolerance:
-    cmd.linear.y = 0.0
-if abs(error_yaw) < yaw_tolerance:
-    cmd.angular.z = 0.0
+```text
+docs/docking_state_machine_spec.md
+docs/docking_state_machine_spec_ja.md
 ```
 
----
+Main sequence:
 
-### 2. Detection Timeout
-
-If no ArUco message is received for a specified duration:
-
-```
-cmd.linear.x = 0.0
-cmd.linear.y = 0.0
-cmd.angular.z = 0.0
+```text
+WAIT_FOR_MARKER
+  -> FAR_GUIDED_APPROACH
+  -> NEAR_ALIGN
+  -> FINAL_APPROACH
+  -> DOCKED
 ```
 
----
+State behavior:
 
-### 3. Velocity Limitation
+```text
+WAIT_FOR_MARKER:
+  stop until a recent marker detection is available
 
-```
-cmd.linear.x = clamp(cmd.linear.x,
-                     -max_forward_speed,
-                     +max_forward_speed)
-cmd.linear.y = clamp(cmd.linear.y,
-                     -max_lateral_speed,
-                     +max_lateral_speed)
-cmd.angular.z = clamp(cmd.angular.z,
-                      -max_angular_speed,
-                      +max_angular_speed)
-```
+FAR_GUIDED_APPROACH:
+  linear.x = far_approach_speed
+  angular.z = weak theta_x centering
+  linear.y = 0
 
-### 4. Minimum Moving Speed
+NEAR_ALIGN:
+  linear.x = 0
+  linear.y = lateral correction
+  angular.z = marker yaw correction
 
-If the robot is outside `z_tolerance`, the command keeps at least
-`min_forward_speed`. If the robot is outside `x_tolerance`, the command
-keeps at least `min_lateral_speed`. If the robot is outside `yaw_tolerance`,
-the command keeps at least `min_angular_speed`. All preserve the command direction.
+FINAL_APPROACH:
+  linear.x = final_approach_speed
+  linear.y = 0
+  angular.z = 0
 
-```
-if 0.0 < abs(cmd.linear.x) < min_forward_speed:
-    cmd.linear.x = sign(cmd.linear.x) * min_forward_speed
-if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
-    cmd.linear.y = sign(cmd.linear.y) * min_lateral_speed
-if 0.0 < abs(cmd.angular.z) < min_angular_speed:
-    cmd.angular.z = sign(cmd.angular.z) * min_angular_speed
+HOLD:
+  stop for hold_duration, then resume a valid state or wait for marker
+
+DOCKED:
+  stop
 ```
 
----
+## Docked Condition
+
+The robot enters `DOCKED` only when all final pose errors are within tolerance:
+
+```text
+abs(aruco_z - target_z) < z_tolerance
+abs(aruco_x - target_x) < x_tolerance
+abs(wrap_pi(aruco_yaw - target_yaw)) < yaw_tolerance
+```
+
+The controller never commands forward motion when:
+
+```text
+aruco_z <= minimum_safe_z
+```
 
 ## Parameters
 
 ```yaml
-target_z: 1.0              # target distance [m]
-kp_z: 1.0                  # proportional gain
-min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
-max_forward_speed: 0.95    # maximum speed [m/s]
-z_tolerance: 0.01          # acceptable error [m]
-target_x: 0.0              # target lateral offset [m]
-kp_x: 1.0                  # lateral proportional gain
-min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
-max_lateral_speed: 0.95    # maximum lateral speed [m/s]
-x_tolerance: 0.03          # acceptable lateral error [m]
-target_yaw: 0.0            # target marker yaw [rad]
-kp_yaw: 1.0                # yaw proportional gain
-min_angular_speed: 0.1     # minimum yaw speed outside tolerance [rad/s]
-max_angular_speed: 0.5     # maximum yaw speed [rad/s]
-yaw_tolerance: 0.05        # acceptable yaw error [rad]
-detection_timeout: 0.5     # timeout [sec]
-control_rate: 20.0         # control loop frequency [Hz]
-```
+target_distance: 1.0
+align_distance: 1.2
+minimum_safe_z: 1.0
+align_hysteresis: 0.10
 
----
+target_x: 0.0
+target_z: 1.0
+target_yaw: 0.0
+
+x_tolerance: 0.05
+z_tolerance: 0.03
+yaw_tolerance: 0.06
+
+final_x_realign_threshold: 0.08
+final_yaw_realign_threshold: 0.10
+
+theta_x_slow_limit: 0.15
+theta_x_stop_limit: 0.25
+theta_y_slow_limit: 0.15
+theta_y_stop_limit: 0.25
+
+kp_lateral: 0.4
+kp_yaw: 0.6
+kp_far_center: 0.3
+
+far_approach_speed: 0.3
+reduced_far_approach_speed: 0.3
+final_approach_speed: 0.3
+min_far_center_speed: 0.3
+max_far_center_speed: 0.95
+min_lateral_align_speed: 0.3
+max_lateral_align_speed: 0.95
+min_yaw_align_speed: 0.3
+max_yaw_align_speed: 0.95
+
+detection_timeout: 0.5
+hold_duration: 0.8
+control_rate: 20.0
+```
 
 ## System Integration
 
@@ -197,8 +171,6 @@ locomotion_core/rover_velocity
 locomotion_core/cmd_roboteq
   drives Roboteq motor controllers
 ```
-
----
 
 ## Usage
 
@@ -235,32 +207,3 @@ elapsed_sec, aruco_age_sec, cmd_age_sec,
 aruco_id, aruco_x, aruco_y, aruco_z, aruco_distance, aruco_theta, aruco_yaw,
 cmd_linear_x, cmd_linear_y, cmd_angular_z
 ```
-
----
-
-## Scope (v0.1)
-
-* Distance-based forward/backward control
-* Lateral alignment control
-* Yaw alignment control
-* Proportional (P) control
-* Safety stop (tolerance & timeout)
-
----
-
-## Out of Scope (Future Work)
-
-* PID control
-* Multi-marker handling
-* Obstacle avoidance
-* Full docking sequence
-
----
-
-## Next Steps
-
-* Validate forward/backward motion
-* Tune `kp_z` and speed limits
-* Validate lateral motion direction
-* Validate yaw motion direction
-* Introduce state machine (TRACKING / REACHED / LOST)
