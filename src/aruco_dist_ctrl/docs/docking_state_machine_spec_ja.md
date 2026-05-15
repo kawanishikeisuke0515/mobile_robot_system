@@ -252,6 +252,8 @@ if visibility slow guard violated:
 
 このステートでは横移動とyawを指令できる。ただし、yaw + 前進で不安定化したため、最初の実装では `linear.x = 0.0` を維持する。
 
+`NEAR_ALIGN` に入った直後は、マーカー中心を向く動作を優先する。`theta_x` が `theta_x_slow_limit` を超えている間は、横移動とマーカー面yaw補正を止め、`theta_x` によるその場回転だけを行う。
+
 指令:
 
 ```text
@@ -259,6 +261,14 @@ lateral_error = aruco_x - target_x
 yaw_error = wrap_pi(aruco_yaw - target_yaw)
 
 linear.x = 0.0
+
+if abs(theta_x) > theta_x_slow_limit:
+    linear.y = 0.0
+    angular.z = clamp_with_min(-kp_visibility_recovery * theta_x,
+                               min_visibility_recovery_speed,
+                               max_visibility_recovery_speed)
+    return
+
 linear.y = clamp(-kp_lateral * lateral_error,
                  -max_lateral_align_speed,
                  max_lateral_align_speed)
@@ -336,12 +346,12 @@ marker lost -> WAIT_FOR_MARKER
 ```text
 linear.x = 0.0
 linear.y = 0.0
-angular.z = clamp_with_min(kp_visibility_recovery * theta_x,
+angular.z = clamp_with_min(-kp_visibility_recovery * theta_x,
                            min_visibility_recovery_speed,
                            max_visibility_recovery_speed)
 ```
 
-指令方向は `theta_x` の符号を保つ。実機テストで回転方向が逆なら、ゲイン調整より先に復帰指令の符号を反転する。
+実機テストでは、このローバーの指令系では符号が逆だった。そのため復帰指令では意図的に `theta_x` を反転する。
 
 遷移:
 

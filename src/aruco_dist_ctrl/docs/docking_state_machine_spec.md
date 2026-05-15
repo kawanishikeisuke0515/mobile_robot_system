@@ -302,6 +302,10 @@ This state can command lateral and yaw motion. It should avoid strong forward
 motion, because yaw plus forward motion has caused instability. The first
 implementation should keep `linear.x = 0.0` in this state.
 
+At the start of `NEAR_ALIGN`, marker-center yaw is prioritized. While `theta_x`
+is greater than `theta_x_slow_limit`, stop lateral motion and marker-surface yaw
+alignment, and rotate in place using `theta_x`.
+
 Command:
 
 ```text
@@ -309,6 +313,14 @@ lateral_error = aruco_x - target_x
 yaw_error = wrap_pi(aruco_yaw - target_yaw)
 
 linear.x = 0.0
+
+if abs(theta_x) > theta_x_slow_limit:
+    linear.y = 0.0
+    angular.z = clamp_with_min(-kp_visibility_recovery * theta_x,
+                               min_visibility_recovery_speed,
+                               max_visibility_recovery_speed)
+    return
+
 linear.y = clamp(-kp_lateral * lateral_error,
                  -max_lateral_align_speed,
                  max_lateral_align_speed)
@@ -393,13 +405,13 @@ Command:
 ```text
 linear.x = 0.0
 linear.y = 0.0
-angular.z = clamp_with_min(kp_visibility_recovery * theta_x,
+angular.z = clamp_with_min(-kp_visibility_recovery * theta_x,
                            min_visibility_recovery_speed,
                            max_visibility_recovery_speed)
 ```
 
-The command direction should preserve the sign of `theta_x`. If the sign is
-reversed in real-robot tests, invert the recovery command before tuning gains.
+Real-robot tests showed that this sign was reversed for the current rover
+command convention, so the recovery command intentionally inverts `theta_x`.
 
 Transitions:
 

@@ -341,6 +341,13 @@ class ArucoDistanceController(Node):
         if self.latest_distance > self.align_distance + self.align_hysteresis:
             self._transition_to(STATE_FAR_GUIDED_APPROACH, 'outside align hysteresis')
             return cmd
+        if self._near_centering_needed():
+            cmd.angular.z = self._clamp_with_min(
+                -self.kp_visibility_recovery * self._theta_x(),
+                self.min_visibility_recovery_speed,
+                self.max_visibility_recovery_speed,
+            )
+            return cmd
         if self._near_align_complete():
             self._transition_to(STATE_FINAL_APPROACH, 'near alignment complete')
             return cmd
@@ -397,7 +404,7 @@ class ArucoDistanceController(Node):
             return cmd
 
         cmd.angular.z = self._clamp_with_min(
-            self.kp_visibility_recovery * self._theta_x(),
+            -self.kp_visibility_recovery * self._theta_x(),
             self.min_visibility_recovery_speed,
             self.max_visibility_recovery_speed,
         )
@@ -473,6 +480,9 @@ class ArucoDistanceController(Node):
 
     def _visibility_slow_guard(self) -> bool:
         return abs(self._theta_x()) > self.theta_x_slow_limit or abs(self._theta_y()) > self.theta_y_slow_limit
+
+    def _near_centering_needed(self) -> bool:
+        return abs(self._theta_x()) > self.theta_x_slow_limit
 
     def _horizontal_visibility_recovery_needed(self) -> bool:
         return abs(self._theta_x()) > self.theta_x_stop_limit

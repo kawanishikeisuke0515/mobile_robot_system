@@ -90,6 +90,9 @@ FAR_GUIDED_APPROACH:
 
 NEAR_ALIGN:
   linear.x = 0
+  if abs(theta_x) > theta_x_slow_limit:
+    angular.z = -kp_visibility_recovery * theta_x
+    linear.y = 0
   linear.y = lateral correction
   angular.z = marker yaw correction
 
@@ -101,7 +104,7 @@ FINAL_APPROACH:
 RECOVER_VISIBILITY:
   linear.x = 0
   linear.y = 0
-  angular.z = theta_x recovery yaw
+  angular.z = -kp_visibility_recovery * theta_x
 
 HOLD:
   stop for hold_duration, then resume a valid state or wait for marker
