@@ -12,6 +12,8 @@ def generate_launch_description():
     min_forward_speed = LaunchConfiguration('min_forward_speed')
     max_forward_speed = LaunchConfiguration('max_forward_speed')
     z_tolerance = LaunchConfiguration('z_tolerance')
+    docking_distance = LaunchConfiguration('docking_distance')
+    final_forward_speed = LaunchConfiguration('final_forward_speed')
     target_x = LaunchConfiguration('target_x')
     kp_x = LaunchConfiguration('kp_x')
     min_lateral_speed = LaunchConfiguration('min_lateral_speed')
@@ -22,6 +24,8 @@ def generate_launch_description():
     min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
     yaw_tolerance = LaunchConfiguration('yaw_tolerance')
+    yaw_distance_gain = LaunchConfiguration('yaw_distance_gain')
+    yaw_weight_min = LaunchConfiguration('yaw_weight_min')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -58,6 +62,16 @@ def generate_launch_description():
             'z_tolerance',
             default_value='0.03',
             description='Distance error tolerance in meters',
+        ),
+        DeclareLaunchArgument(
+            'docking_distance',
+            default_value='0.35',
+            description='Final stop distance from the marker in meters',
+        ),
+        DeclareLaunchArgument(
+            'final_forward_speed',
+            default_value='0.2',
+            description='Forward command used during FINAL_DOCKING',
         ),
         DeclareLaunchArgument(
             'target_x',
@@ -97,7 +111,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'min_angular_speed',
             default_value='0.1',
-            description='Minimum yaw command outside yaw_tolerance',
+            description='Retained for compatibility; weighted yaw control does not apply direct minimum speed',
         ),
         DeclareLaunchArgument(
             'max_angular_speed',
@@ -108,6 +122,16 @@ def generate_launch_description():
             'yaw_tolerance',
             default_value='0.05',
             description='Yaw error tolerance in radians',
+        ),
+        DeclareLaunchArgument(
+            'yaw_distance_gain',
+            default_value='1.0',
+            description='Position-error gain used to weaken yaw control far from the pre-docking target',
+        ),
+        DeclareLaunchArgument(
+            'yaw_weight_min',
+            default_value='0.2',
+            description='Minimum yaw-control weight during PRE_DOCKING',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -130,6 +154,8 @@ def generate_launch_description():
                 'min_forward_speed': min_forward_speed,
                 'max_forward_speed': max_forward_speed,
                 'z_tolerance': z_tolerance,
+                'docking_distance': docking_distance,
+                'final_forward_speed': final_forward_speed,
                 'target_x': target_x,
                 'kp_x': kp_x,
                 'min_lateral_speed': min_lateral_speed,
@@ -140,6 +166,8 @@ def generate_launch_description():
                 'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
                 'yaw_tolerance': yaw_tolerance,
+                'yaw_distance_gain': yaw_distance_gain,
+                'yaw_weight_min': yaw_weight_min,
             }],
         ),
         Node(
