@@ -40,7 +40,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'target_z',
-            default_value='1.0',
+            default_value='1.5',
             description='Target distance from the marker in meters',
         ),
         DeclareLaunchArgument(
@@ -65,7 +65,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'docking_distance',
-            default_value='0.35',
+            default_value='1.0',
             description='Final stop distance from the marker in meters',
         ),
         DeclareLaunchArgument(
@@ -105,7 +105,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'kp_yaw',
-            default_value='1.0',
+            default_value='0.3',
             description='Proportional gain for yaw alignment control',
         ),
         DeclareLaunchArgument(
