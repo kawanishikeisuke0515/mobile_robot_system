@@ -53,6 +53,24 @@ source install/setup.bash
 ros2 launch aruco_docking_bringup aruco_docking.launch.py
 ```
 
+## Run Keyboard Teleop
+```bash
+source install/setup.bash
+ros2 launch locomotion_core keyboard_teleop.launch.py
+```
+
+This launch publishes keyboard `cmd_vel` commands to `/rov_cmd_vel` and starts:
+
+- `teleop_twist_keyboard`
+- `locomotion_core/rover_velocity`
+- `locomotion_core/cmd_roboteq`
+
+If keyboard input is not captured by the launch terminal, run teleop in a separate terminal window:
+
+```bash
+ros2 launch locomotion_core keyboard_teleop.launch.py teleop_prefix:="xterm -e"
+```
+
 ## Distance Publisher Node Info
 - Node name: aruco_distance_publisher
 - Language: Python (rclpy + OpenCV)

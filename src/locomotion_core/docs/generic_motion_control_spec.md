@@ -31,5 +31,6 @@ This document outlines the motion control specifications for the rover.
 - Teleop can also publish `/rov_cmd_vel` when manually driving
 
 ## Usage
-1. Launch wheel control: `ros2 launch locomotion_core wheel_control.launch.py`
-2. Run teleop: `ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/rov_cmd_vel`
+1. Launch keyboard teleop and wheel control: `ros2 launch locomotion_core keyboard_teleop.launch.py`
+2. Or launch wheel control only: `ros2 launch locomotion_core wheel_control.launch.py`
+3. Run teleop separately if needed: `ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/rov_cmd_vel`
