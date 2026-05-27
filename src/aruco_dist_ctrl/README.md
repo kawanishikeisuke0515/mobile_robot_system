@@ -228,7 +228,7 @@ min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.03          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
-final_forward_speed: 0.2   # forward speed in FINAL_DOCKING [m/s]
+final_forward_speed: 0.4   # forward speed in FINAL_DOCKING [m/s]
 target_x: 0.0              # target lateral offset [m]
 kp_x: 1.0                  # lateral proportional gain
 min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]

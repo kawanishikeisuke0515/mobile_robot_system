@@ -31,7 +31,7 @@ class ArucoDistanceController(Node):
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.03)
         self.declare_parameter('docking_distance', 1.0)
-        self.declare_parameter('final_forward_speed', 0.2)
+        self.declare_parameter('final_forward_speed', 0.4)
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('kp_x', 1.0)
         self.declare_parameter('min_lateral_speed', 0.3)

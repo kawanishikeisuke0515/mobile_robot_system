@@ -70,7 +70,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'final_forward_speed',
-            default_value='0.2',
+            default_value='0.4',
             description='Forward command used during FINAL_DOCKING',
         ),
         DeclareLaunchArgument(
