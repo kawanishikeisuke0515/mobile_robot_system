@@ -40,7 +40,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'target_z',
-            default_value='1.5',
+            default_value='1.3',
             description='Target distance from the marker in meters',
         ),
         DeclareLaunchArgument(
