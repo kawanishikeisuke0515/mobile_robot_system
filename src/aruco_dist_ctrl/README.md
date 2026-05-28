@@ -295,8 +295,7 @@ aruco_cmd_log_<timestamp>.csv
 Main columns:
 
 ```text
-elapsed_sec, aruco_age_sec, cmd_age_sec,
-aruco_id, aruco_x, aruco_y, aruco_z, aruco_distance, aruco_theta, aruco_yaw,
+elapsed_sec, aruco_x, aruco_z, aruco_yaw,
 cmd_linear_x, cmd_linear_y, cmd_angular_z
 ```
 
