@@ -13,18 +13,21 @@ def generate_launch_description():
     max_forward_speed = LaunchConfiguration('max_forward_speed')
     z_tolerance = LaunchConfiguration('z_tolerance')
     docking_distance = LaunchConfiguration('docking_distance')
+    kp_final_z = LaunchConfiguration('kp_final_z')
     final_forward_speed = LaunchConfiguration('final_forward_speed')
     target_x = LaunchConfiguration('target_x')
     kp_x = LaunchConfiguration('kp_x')
     min_lateral_speed = LaunchConfiguration('min_lateral_speed')
     max_lateral_speed = LaunchConfiguration('max_lateral_speed')
     x_tolerance = LaunchConfiguration('x_tolerance')
+    target_yaw = LaunchConfiguration('target_yaw')
     kp_yaw = LaunchConfiguration('kp_yaw')
     min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
     yaw_tolerance = LaunchConfiguration('yaw_tolerance')
     yaw_distance_gain = LaunchConfiguration('yaw_distance_gain')
     yaw_weight_min = LaunchConfiguration('yaw_weight_min')
+    angular_switch_distance = LaunchConfiguration('angular_switch_distance')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -68,9 +71,14 @@ def generate_launch_description():
             description='Final stop distance from the marker in meters',
         ),
         DeclareLaunchArgument(
+            'kp_final_z',
+            default_value='0.4',
+            description='Proportional gain for final docking forward control',
+        ),
+        DeclareLaunchArgument(
             'final_forward_speed',
             default_value='0.4',
-            description='Forward command used during FINAL_DOCKING',
+            description='Maximum forward command used during FINAL_DOCKING',
         ),
         DeclareLaunchArgument(
             'target_x',
@@ -98,9 +106,14 @@ def generate_launch_description():
             description='Lateral error tolerance in meters',
         ),
         DeclareLaunchArgument(
+            'target_yaw',
+            default_value='0.0',
+            description='Target marker yaw angle in radians',
+        ),
+        DeclareLaunchArgument(
             'kp_yaw',
             default_value='0.3',
-            description='Proportional gain for marker-center bearing control',
+            description='Proportional gain for yaw alignment control',
         ),
         DeclareLaunchArgument(
             'min_angular_speed',
@@ -115,7 +128,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'yaw_tolerance',
             default_value='0.01',
-            description='Marker-center bearing error tolerance in radians',
+            description='Yaw error tolerance in radians',
         ),
         DeclareLaunchArgument(
             'yaw_distance_gain',
@@ -126,6 +139,11 @@ def generate_launch_description():
             'yaw_weight_min',
             default_value='0.2',
             description='Minimum yaw-control weight during PRE_DOCKING',
+        ),
+        DeclareLaunchArgument(
+            'angular_switch_distance',
+            default_value='2.0',
+            description='Distance threshold for switching angular error from theta to marker yaw',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -149,18 +167,21 @@ def generate_launch_description():
                 'max_forward_speed': max_forward_speed,
                 'z_tolerance': z_tolerance,
                 'docking_distance': docking_distance,
+                'kp_final_z': kp_final_z,
                 'final_forward_speed': final_forward_speed,
                 'target_x': target_x,
                 'kp_x': kp_x,
                 'min_lateral_speed': min_lateral_speed,
                 'max_lateral_speed': max_lateral_speed,
                 'x_tolerance': x_tolerance,
+                'target_yaw': target_yaw,
                 'kp_yaw': kp_yaw,
                 'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
                 'yaw_tolerance': yaw_tolerance,
                 'yaw_distance_gain': yaw_distance_gain,
                 'yaw_weight_min': yaw_weight_min,
+                'angular_switch_distance': angular_switch_distance,
             }],
         ),
         Node(

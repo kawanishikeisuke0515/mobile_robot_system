@@ -1,12 +1,12 @@
-# ArUco Distance Controller (v0.2 Center-Bearing Variant)
+# ArUco Distance Controller (v0.3 Switching Docking Control)
 
 ## Overview
 
-This node controls the robot's forward/backward, lateral, and yaw motion based on the position of an ArUco marker.
+This node controls the robot's forward/backward, lateral, and yaw motion based on ArUco marker pose information.
 
-The objective is to align the robot to a pre-docking pose while pointing toward the marker center, and then perform a simple straight final approach toward the marker.
+The robot is equipped with omni wheels, so position control and posture control can be handled independently through `linear.x`, `linear.y`, and `angular.z`.
 
-This variant uses the bearing angle to the marker center as the angular error. It does not use the marker-plane orientation estimated from `rvec` for yaw control.
+The objective is to autonomously dock to a docking station by first moving from the initial pose `P0` to a pre-docking pose `P1`, and then moving from `P1` to the final docking pose `P2`.
 
 ---
 
@@ -37,6 +37,7 @@ type: aruco_interfaces/msg/ArucoDistance
 x   : marker translation right from the camera in meters
 z   : marker translation forward from the camera in meters
 theta : bearing angle to the marker center in radians, calculated as atan2(x, z)
+yaw : marker orientation angle from rvec in radians
 ```
 
 ### ArUcoDistance Axis Definition
@@ -45,9 +46,10 @@ theta : bearing angle to the marker center in radians, calculated as atan2(x, z)
 - `y`: down direction in camera frame
 - `z`: forward direction in camera frame
 
-The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `theta` to compute angular motion.
+The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and both `theta` and `yaw` to compute angular motion.
 
-The `ArucoDistance` message also contains `yaw`, the marker-plane orientation estimated from `rvec`, but this controller variant does not use it.
+- `theta`: used to keep the marker in view, especially at long range.
+- `yaw`: used to align the robot nearly perpendicular to the docking station, especially at short range.
 
 ---
 
@@ -85,12 +87,33 @@ FINAL_DOCKING
 ```text
 forward_error = aruco_z - target_z
 lateral_error = aruco_x - target_x
-error_theta = wrap_pi(aruco_theta)
+bearing_error = wrap_pi(aruco_theta)
+perpendicular_error = wrap_pi(aruco_yaw - target_yaw)
+```
+
+### Angular Error Switching
+
+The angular control target switches according to distance.
+
+```text
+if aruco_z > angular_switch_distance:
+    angular_error = bearing_error
+else:
+    angular_error = perpendicular_error
+```
+
+Meaning:
+
+```text
+z > 2.0 m  : prioritize marker visibility using theta
+z <= 2.0 m : prioritize perpendicular docking posture using yaw
 ```
 
 ### PRE_DOCKING
 
-The purpose of `PRE_DOCKING` is to move toward the pre-docking target while turning the robot toward the marker center.
+The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-docking pose `P1` while preparing both position and posture for docking.
+
+At long range, the controller prioritizes keeping the marker in the camera field of view. Near the docking station, the controller prioritizes becoming perpendicular to the docking station.
 
 ```text
 position_error = abs(forward_error) + abs(lateral_error)
@@ -98,14 +121,20 @@ weight = yaw_weight_min + (1.0 - yaw_weight_min) / (1.0 + yaw_distance_gain * po
 
 cmd.linear.x = kp_z * forward_error
 cmd.linear.y = -kp_x * lateral_error
-cmd.angular.z = kp_yaw * error_theta * weight
+cmd.angular.z = kp_yaw * angular_error * weight
 ```
 
-`weight` approaches `yaw_weight_min` when the robot is far from the target, and approaches `1.0` near the target. This keeps angular control alive at long range without letting the robot rotate too aggressively before position alignment.
+`weight` approaches `yaw_weight_min` when the robot is far from the target, and approaches `1.0` near the target. This suppresses unnecessary rotation at long range while keeping angular control active.
 
 ### FINAL_DOCKING
 
-The purpose of `FINAL_DOCKING` is to drive straight toward the marker from an already aligned pose.
+The purpose of `FINAL_DOCKING` is to move from the pre-docking pose `P1` to the final docking pose `P2`.
+
+This state is not open-loop. The robot continues to use all three control axes:
+
+- `linear.x`: forward motion toward the docking distance
+- `linear.y`: lateral error correction
+- `angular.z`: posture error correction and disturbance rejection
 
 ```text
 if aruco_z <= docking_distance:
@@ -113,9 +142,12 @@ if aruco_z <= docking_distance:
     cmd.linear.y = 0.0
     cmd.angular.z = 0.0
 else:
-    cmd.linear.x = final_forward_speed
-    cmd.linear.y = 0.0
-    cmd.angular.z = 0.0
+    final_forward_error = aruco_z - docking_distance
+    cmd.linear.x = clamp(kp_final_z * final_forward_error,
+                         0.0,
+                         final_forward_speed)
+    cmd.linear.y = -kp_x * lateral_error
+    cmd.angular.z = kp_yaw * angular_error
 ```
 
 There is no separate `DOCKED` state. After the final stop condition is reached, the controller keeps publishing zero velocity while staying in `FINAL_DOCKING`.
@@ -132,14 +164,14 @@ The controller switches from `PRE_DOCKING` to `FINAL_DOCKING` only when a recent
 marker_visible == true
 abs(aruco_z - target_z) < z_tolerance
 abs(aruco_x - target_x) < x_tolerance
-abs(wrap_pi(aruco_theta)) < yaw_tolerance
+abs(angular_error) < yaw_tolerance
 ```
 
 In the implementation, `marker_visible == true` means `/aruco/distance` has been received within `detection_timeout`.
 
 ### FINAL_DOCKING Stop Condition
 
-Once the controller is in `FINAL_DOCKING`, it keeps moving straight until the marker reaches the final stop distance:
+Once the controller is in `FINAL_DOCKING`, it keeps moving with feedback correction until the marker reaches the final stop distance:
 
 ```text
 if aruco_z <= docking_distance:
@@ -160,10 +192,12 @@ PRE_DOCKING:
   aruco_z < target_z    → robot moves backward
   aruco_x > target_x    → robot moves in negative lateral direction
   aruco_x < target_x    → robot moves in positive lateral direction
-  marker-center bearing error is corrected with position-error-based weighting
+  angular error switches between theta and yaw according to distance
+  angular command is corrected with position-error-based weighting
 
 FINAL_DOCKING:
-  aruco_z > docking_distance  → robot moves forward at final_forward_speed
+  aruco_z > docking_distance  → robot moves forward with feedback correction
+  lateral and angular errors  → robot keeps correcting with linear.y and angular.z
   aruco_z <= docking_distance → robot stops
 ```
 
@@ -178,7 +212,7 @@ if abs(forward_error) < z_tolerance:
     cmd.linear.x = 0.0
 if abs(lateral_error) < x_tolerance:
     cmd.linear.y = 0.0
-if abs(error_theta) < yaw_tolerance:
+if abs(angular_error) < yaw_tolerance:
     cmd.angular.z = 0.0
 ```
 
@@ -212,7 +246,7 @@ cmd.angular.z = clamp(cmd.angular.z,
 
 If the robot is outside `z_tolerance`, the command keeps at least `min_forward_speed`. If the robot is outside `x_tolerance`, the command keeps at least `min_lateral_speed`. Both preserve the command direction.
 
-Angular control does not use direct minimum angular speed in `PRE_DOCKING`. Instead, it uses `yaw_weight_min` so angular control is weakened far from the pre-docking target but does not vanish.
+Yaw control does not use direct minimum angular speed in `PRE_DOCKING`. Instead, it uses `yaw_weight_min` so angular control is weakened far from the pre-docking target but does not vanish.
 
 ```text
 if 0.0 < abs(cmd.linear.x) < min_forward_speed:
@@ -230,20 +264,23 @@ target_z: 1.5              # pre-docking target distance [m]
 kp_z: 1.0                  # forward/backward proportional gain
 min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
-z_tolerance: 0.03          # acceptable pre-docking distance error [m]
+z_tolerance: 0.01          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
-final_forward_speed: 0.4   # forward speed in FINAL_DOCKING [m/s]
+kp_final_z: 0.4            # final docking forward proportional gain
+final_forward_speed: 0.4   # maximum forward speed in FINAL_DOCKING [m/s]
 target_x: 0.0              # target lateral offset [m]
 kp_x: 1.0                  # lateral proportional gain
 min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
-x_tolerance: 0.03          # acceptable lateral error [m]
-kp_yaw: 0.3                # angular.z proportional gain for marker-center bearing error
-min_angular_speed: 0.1     # retained for compatibility; weighted angular control does not use direct minimum speed
+x_tolerance: 0.01          # acceptable lateral error [m]
+target_yaw: 0.0            # target marker yaw [rad]
+kp_yaw: 0.3                # yaw proportional gain
+min_angular_speed: 0.1     # retained for compatibility; weighted yaw does not use direct minimum speed
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
-yaw_tolerance: 0.05        # acceptable marker-center bearing error [rad]
-yaw_distance_gain: 1.0     # position-error gain for angular-control weighting
-yaw_weight_min: 0.2        # minimum angular-control weight far from target
+yaw_tolerance: 0.01        # acceptable yaw error [rad]
+yaw_distance_gain: 1.0     # position-error gain for yaw weighting
+yaw_weight_min: 0.2        # minimum yaw weight far from target
+angular_switch_distance: 2.0  # above this z use theta; below or equal use yaw [m]
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -304,12 +341,13 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 ---
 
-## Scope (v0.2)
+## Scope (v0.3)
 
 * Distance-based forward/backward control
 * Lateral alignment control
-* Weighted marker-center bearing control for yaw motion
+* Distance-dependent angular control switching between marker-center bearing and marker yaw
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
+* Closed-loop final docking using `linear.x`, `linear.y`, and `angular.z`
 * Safety stop (tolerance & timeout)
 
 ---
@@ -327,6 +365,8 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 * Validate forward/backward motion
 * Validate lateral motion direction
-* Validate yaw motion direction from marker-center bearing error
+* Validate theta-based yaw motion direction at long range
+* Validate yaw-based perpendicular alignment at short range
+* Tune `angular_switch_distance`
 * Tune `yaw_distance_gain` and `yaw_weight_min`
 * Tune `docking_distance` and `final_forward_speed`
