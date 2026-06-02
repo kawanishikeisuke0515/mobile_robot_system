@@ -19,7 +19,6 @@ def generate_launch_description():
     min_lateral_speed = LaunchConfiguration('min_lateral_speed')
     max_lateral_speed = LaunchConfiguration('max_lateral_speed')
     x_tolerance = LaunchConfiguration('x_tolerance')
-    target_yaw = LaunchConfiguration('target_yaw')
     kp_yaw = LaunchConfiguration('kp_yaw')
     min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
@@ -60,7 +59,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'z_tolerance',
-            default_value='0.03',
+            default_value='0.01',
             description='Distance error tolerance in meters',
         ),
         DeclareLaunchArgument(
@@ -95,18 +94,13 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'x_tolerance',
-            default_value='0.03',
+            default_value='0.01',
             description='Lateral error tolerance in meters',
-        ),
-        DeclareLaunchArgument(
-            'target_yaw',
-            default_value='0.0',
-            description='Target marker yaw angle in radians',
         ),
         DeclareLaunchArgument(
             'kp_yaw',
             default_value='0.3',
-            description='Proportional gain for yaw alignment control',
+            description='Proportional gain for marker-center bearing control',
         ),
         DeclareLaunchArgument(
             'min_angular_speed',
@@ -120,8 +114,8 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'yaw_tolerance',
-            default_value='0.05',
-            description='Yaw error tolerance in radians',
+            default_value='0.01',
+            description='Marker-center bearing error tolerance in radians',
         ),
         DeclareLaunchArgument(
             'yaw_distance_gain',
@@ -161,7 +155,6 @@ def generate_launch_description():
                 'min_lateral_speed': min_lateral_speed,
                 'max_lateral_speed': max_lateral_speed,
                 'x_tolerance': x_tolerance,
-                'target_yaw': target_yaw,
                 'kp_yaw': kp_yaw,
                 'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
