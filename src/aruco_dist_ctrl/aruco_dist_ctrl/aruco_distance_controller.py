@@ -334,7 +334,7 @@ class ArucoDistanceController(Node):
         aruco_yaw: float,
     ) -> float:
         if aruco_z > self.angular_switch_distance:
-            return _wrap_pi(aruco_theta)
+            return _wrap_pi(-aruco_theta)
 
         return _wrap_pi(aruco_yaw - self.target_yaw)
 

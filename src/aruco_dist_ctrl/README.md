@@ -87,9 +87,11 @@ FINAL_DOCKING
 ```text
 forward_error = aruco_z - target_z
 lateral_error = aruco_x - target_x
-bearing_error = wrap_pi(aruco_theta)
+bearing_error = wrap_pi(-aruco_theta)
 perpendicular_error = wrap_pi(aruco_yaw - target_yaw)
 ```
+
+`aruco_theta` is positive when the marker center is to the camera-right side. The controller uses `-aruco_theta` so that the yaw command turns the robot toward the marker center.
 
 ### Angular Error Switching
 
