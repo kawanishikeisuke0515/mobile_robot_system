@@ -114,18 +114,12 @@ perpendicular_error = wrap_pi(aruco_yaw - target_yaw)
 The angular control target switches according to distance and marker visibility margin.
 
 ```text
-if aruco_z <= yaw_align_force_distance:
-    angular_error = perpendicular_error
-    angular_enabled = true
-elif (
-    aruco_z <= angular_switch_distance
-    and abs(normalized_center_error) <= yaw_align_center_error_threshold
-):
-    angular_error = perpendicular_error
-    angular_enabled = true
-elif aruco_z <= angular_switch_distance:
+if abs(normalized_center_error) > yaw_align_center_error_threshold:
     angular_error = 0.0
     angular_enabled = false
+elif aruco_z <= angular_switch_distance:
+    angular_error = perpendicular_error
+    angular_enabled = true
 else:
     angular_error = bearing_error
     angular_enabled = true
@@ -134,24 +128,23 @@ else:
 Meaning:
 
 ```text
-z > 2.0 m:
+abs(normalized_center_error) > 0.4:
+  stop angular.z at any distance to avoid losing the marker
+
+abs(normalized_center_error) <= 0.4 and z > 2.0 m:
   prioritize marker visibility using theta
 
-1.3 m < z <= 2.0 m:
-  use yaw only when the marker is near the image center
-  stop angular.z when the marker is near the image edge
-
-z <= 1.3 m:
-  force yaw alignment so the robot becomes perpendicular before final docking
+abs(normalized_center_error) <= 0.4 and z <= 2.0 m:
+  use yaw so the robot becomes perpendicular to the docking station
 ```
 
 ### PRE_DOCKING
 
 The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-docking pose `P1` while preparing both position and posture for docking.
 
-At long range, the controller prioritizes keeping the marker in the camera field of view. Near the docking station, the controller prioritizes becoming perpendicular to the docking station.
+When the marker is near the image edge, angular motion is stopped and only translational control continues. This prevents the robot from rotating the marker out of view.
 
-Between `yaw_align_force_distance` and `angular_switch_distance`, yaw alignment is allowed only when the marker center is sufficiently close to the image center. If the marker is near the image edge in this distance range, angular motion is stopped and only translational control continues. This prevents the robot from rotating the marker out of view.
+When the marker is near the image center, the controller uses `theta` at long range to keep the marker visible and switches to `yaw` near the docking station to align perpendicular to the wall.
 
 ```text
 position_error = abs(forward_error) + abs(lateral_error)
@@ -318,7 +311,6 @@ yaw_tolerance: 0.01        # acceptable yaw error [rad]
 yaw_distance_gain: 1.0     # position-error gain for yaw weighting
 yaw_weight_min: 0.2        # minimum yaw weight far from target
 angular_switch_distance: 2.0       # yaw alignment may start below this distance [m]
-yaw_align_force_distance: 1.3      # yaw alignment is forced below this distance [m]
 yaw_align_center_error_threshold: 0.4  # yaw alignment may start only when abs(normalized_center_error) is below this value
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
@@ -408,7 +400,6 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 * Validate theta-based yaw motion direction at long range
 * Validate yaw-based perpendicular alignment when marker is near image center
 * Tune `angular_switch_distance`
-* Tune `yaw_align_force_distance`
 * Tune `yaw_align_center_error_threshold`
 * Tune `yaw_distance_gain` and `yaw_weight_min`
 * Tune `docking_distance` and `final_forward_speed`

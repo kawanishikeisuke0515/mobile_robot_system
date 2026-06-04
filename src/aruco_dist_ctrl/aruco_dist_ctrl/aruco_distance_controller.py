@@ -45,7 +45,6 @@ class ArucoDistanceController(Node):
         self.declare_parameter('yaw_distance_gain', 1.0)
         self.declare_parameter('yaw_weight_min', 0.2)
         self.declare_parameter('angular_switch_distance', 2.0)
-        self.declare_parameter('yaw_align_force_distance', 1.3)
         self.declare_parameter('yaw_align_center_error_threshold', 0.4)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
@@ -70,7 +69,6 @@ class ArucoDistanceController(Node):
         self.yaw_distance_gain = float(self.get_parameter('yaw_distance_gain').value)
         self.yaw_weight_min = float(self.get_parameter('yaw_weight_min').value)
         self.angular_switch_distance = float(self.get_parameter('angular_switch_distance').value)
-        self.yaw_align_force_distance = float(self.get_parameter('yaw_align_force_distance').value)
         self.yaw_align_center_error_threshold = float(
             self.get_parameter('yaw_align_center_error_threshold').value
         )
@@ -109,8 +107,8 @@ class ArucoDistanceController(Node):
             'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f kp_yaw=%.3f '
             'max_angular_speed=%.3f yaw_tolerance=%.3f yaw_distance_gain=%.3f '
             'yaw_weight_min=%.3f angular_switch_distance=%.3f '
-            'yaw_align_force_distance=%.3f yaw_align_center_error_threshold=%.3f '
-            'detection_timeout=%.3f control_rate=%.1f'
+            'yaw_align_center_error_threshold=%.3f detection_timeout=%.3f '
+            'control_rate=%.1f'
             % (
                 self.target_z,
                 self.kp_z,
@@ -131,7 +129,6 @@ class ArucoDistanceController(Node):
                 self.yaw_distance_gain,
                 self.yaw_weight_min,
                 self.angular_switch_distance,
-                self.yaw_align_force_distance,
                 self.yaw_align_center_error_threshold,
                 self.detection_timeout,
                 self.control_rate,
@@ -177,12 +174,6 @@ class ArucoDistanceController(Node):
             raise ValueError('yaw_weight_min must be between 0 and 1')
         if self.angular_switch_distance < 0.0:
             raise ValueError('angular_switch_distance must be greater than or equal to 0')
-        if self.yaw_align_force_distance < 0.0:
-            raise ValueError('yaw_align_force_distance must be greater than or equal to 0')
-        if self.yaw_align_force_distance > self.angular_switch_distance:
-            raise ValueError(
-                'yaw_align_force_distance must be less than or equal to angular_switch_distance'
-            )
         if self.yaw_align_center_error_threshold < 0.0:
             raise ValueError(
                 'yaw_align_center_error_threshold must be greater than or equal to 0'
@@ -348,14 +339,11 @@ class ArucoDistanceController(Node):
         aruco_yaw: float,
         normalized_center_error: float,
     ) -> tuple[float, bool]:
-        if aruco_z <= self.yaw_align_force_distance:
-            return _wrap_pi(aruco_yaw - self.target_yaw), True
+        if abs(normalized_center_error) > self.yaw_align_center_error_threshold:
+            return 0.0, False
 
         if aruco_z <= self.angular_switch_distance:
-            if abs(normalized_center_error) <= self.yaw_align_center_error_threshold:
-                return _wrap_pi(aruco_yaw - self.target_yaw), True
-
-            return 0.0, False
+            return _wrap_pi(aruco_yaw - self.target_yaw), True
 
         return _wrap_pi(-aruco_theta), True
 
