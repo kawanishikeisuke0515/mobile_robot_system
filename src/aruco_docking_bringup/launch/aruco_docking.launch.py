@@ -13,7 +13,6 @@ def generate_launch_description():
     max_forward_speed = LaunchConfiguration('max_forward_speed')
     z_tolerance = LaunchConfiguration('z_tolerance')
     docking_distance = LaunchConfiguration('docking_distance')
-    kp_final_z = LaunchConfiguration('kp_final_z')
     final_forward_speed = LaunchConfiguration('final_forward_speed')
     target_x = LaunchConfiguration('target_x')
     kp_x = LaunchConfiguration('kp_x')
@@ -71,14 +70,9 @@ def generate_launch_description():
             description='Final stop distance from the marker in meters',
         ),
         DeclareLaunchArgument(
-            'kp_final_z',
-            default_value='0.4',
-            description='Proportional gain for final docking forward control',
-        ),
-        DeclareLaunchArgument(
             'final_forward_speed',
             default_value='0.4',
-            description='Maximum forward command used during FINAL_DOCKING',
+            description='Fixed forward command used during FINAL_DOCKING',
         ),
         DeclareLaunchArgument(
             'target_x',
@@ -167,7 +161,6 @@ def generate_launch_description():
                 'max_forward_speed': max_forward_speed,
                 'z_tolerance': z_tolerance,
                 'docking_distance': docking_distance,
-                'kp_final_z': kp_final_z,
                 'final_forward_speed': final_forward_speed,
                 'target_x': target_x,
                 'kp_x': kp_x,

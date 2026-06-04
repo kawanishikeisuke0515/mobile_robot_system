@@ -132,11 +132,7 @@ cmd.angular.z = kp_yaw * angular_error * weight
 
 The purpose of `FINAL_DOCKING` is to move from the pre-docking pose `P1` to the final docking pose `P2`.
 
-This state is not open-loop. The robot continues to use all three control axes:
-
-- `linear.x`: forward motion toward the docking distance
-- `linear.y`: lateral error correction
-- `angular.z`: posture error correction and disturbance rejection
+This state uses a simple straight final approach from an already aligned pose.
 
 ```text
 if aruco_z <= docking_distance:
@@ -144,12 +140,9 @@ if aruco_z <= docking_distance:
     cmd.linear.y = 0.0
     cmd.angular.z = 0.0
 else:
-    final_forward_error = aruco_z - docking_distance
-    cmd.linear.x = clamp(kp_final_z * final_forward_error,
-                         0.0,
-                         final_forward_speed)
-    cmd.linear.y = -kp_x * lateral_error
-    cmd.angular.z = kp_yaw * angular_error
+    cmd.linear.x = final_forward_speed
+    cmd.linear.y = 0.0
+    cmd.angular.z = 0.0
 ```
 
 There is no separate `DOCKED` state. After the final stop condition is reached, the controller keeps publishing zero velocity while staying in `FINAL_DOCKING`.
@@ -173,7 +166,7 @@ In the implementation, `marker_visible == true` means `/aruco/distance` has been
 
 ### FINAL_DOCKING Stop Condition
 
-Once the controller is in `FINAL_DOCKING`, it keeps moving with feedback correction until the marker reaches the final stop distance:
+Once the controller is in `FINAL_DOCKING`, it keeps moving straight until the marker reaches the final stop distance:
 
 ```text
 if aruco_z <= docking_distance:
@@ -198,8 +191,7 @@ PRE_DOCKING:
   angular command is corrected with position-error-based weighting
 
 FINAL_DOCKING:
-  aruco_z > docking_distance  → robot moves forward with feedback correction
-  lateral and angular errors  → robot keeps correcting with linear.y and angular.z
+  aruco_z > docking_distance  → robot moves forward at final_forward_speed
   aruco_z <= docking_distance → robot stops
 ```
 
@@ -262,14 +254,13 @@ if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
 ## Parameters
 
 ```yaml
-target_z: 1.5              # pre-docking target distance [m]
+target_z: 1.3              # pre-docking target distance [m]
 kp_z: 1.0                  # forward/backward proportional gain
 min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
-kp_final_z: 0.4            # final docking forward proportional gain
-final_forward_speed: 0.4   # maximum forward speed in FINAL_DOCKING [m/s]
+final_forward_speed: 0.4   # fixed forward speed in FINAL_DOCKING [m/s]
 target_x: 0.0              # target lateral offset [m]
 kp_x: 1.0                  # lateral proportional gain
 min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
@@ -349,7 +340,7 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 * Lateral alignment control
 * Distance-dependent angular control switching between marker-center bearing and marker yaw
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
-* Closed-loop final docking using `linear.x`, `linear.y`, and `angular.z`
+* Straight final docking using fixed `linear.x`
 * Safety stop (tolerance & timeout)
 
 ---

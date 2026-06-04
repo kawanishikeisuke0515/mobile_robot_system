@@ -25,13 +25,12 @@ class ArucoDistanceController(Node):
     def __init__(self):
         super().__init__('aruco_distance_controller')
 
-        self.declare_parameter('target_z', 1.5)
+        self.declare_parameter('target_z', 1.3)
         self.declare_parameter('kp_z', 1.0)
         self.declare_parameter('min_forward_speed', 0.3)
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.01)
         self.declare_parameter('docking_distance', 1.0)
-        self.declare_parameter('kp_final_z', 0.4)
         self.declare_parameter('final_forward_speed', 0.4)
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('kp_x', 1.0)
@@ -55,7 +54,6 @@ class ArucoDistanceController(Node):
         self.max_forward_speed = float(self.get_parameter('max_forward_speed').value)
         self.z_tolerance = float(self.get_parameter('z_tolerance').value)
         self.docking_distance = float(self.get_parameter('docking_distance').value)
-        self.kp_final_z = float(self.get_parameter('kp_final_z').value)
         self.final_forward_speed = float(self.get_parameter('final_forward_speed').value)
         self.target_x = float(self.get_parameter('target_x').value)
         self.kp_x = float(self.get_parameter('kp_x').value)
@@ -99,7 +97,7 @@ class ArucoDistanceController(Node):
         self.get_logger().info('publishing forward/backward, lateral, and yaw commands on /rov_cmd_vel')
         self.get_logger().info(
             'target_z=%.3f kp_z=%.3f min_forward_speed=%.3f max_forward_speed=%.3f '
-            'z_tolerance=%.3f docking_distance=%.3f kp_final_z=%.3f final_forward_speed=%.3f '
+            'z_tolerance=%.3f docking_distance=%.3f final_forward_speed=%.3f '
             'target_x=%.3f kp_x=%.3f min_lateral_speed=%.3f '
             'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f kp_yaw=%.3f '
             'max_angular_speed=%.3f yaw_tolerance=%.3f yaw_distance_gain=%.3f '
@@ -112,7 +110,6 @@ class ArucoDistanceController(Node):
                 self.max_forward_speed,
                 self.z_tolerance,
                 self.docking_distance,
-                self.kp_final_z,
                 self.final_forward_speed,
                 self.target_x,
                 self.kp_x,
@@ -144,8 +141,6 @@ class ArucoDistanceController(Node):
             raise ValueError('docking_distance must be greater than or equal to 0')
         if self.docking_distance > self.target_z:
             raise ValueError('docking_distance must be less than or equal to target_z')
-        if self.kp_final_z < 0.0:
-            raise ValueError('kp_final_z must be greater than or equal to 0')
         if self.final_forward_speed < 0.0:
             raise ValueError('final_forward_speed must be greater than or equal to 0')
         if self.final_forward_speed > self.max_forward_speed:
@@ -240,19 +235,7 @@ class ArucoDistanceController(Node):
         if self.latest_z <= self.docking_distance:
             return cmd
 
-        final_forward_error = self.latest_z - self.docking_distance
-        cmd.linear.x = _clamp(
-            self.kp_final_z * final_forward_error,
-            0.0,
-            self.final_forward_speed,
-        )
-        cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
-        cmd.angular.z = self._calculate_angular_velocity(
-            self.latest_z,
-            self.latest_theta,
-            self.latest_yaw,
-            1.0,
-        )
+        cmd.linear.x = self.final_forward_speed
         return cmd
 
     def _is_ready_for_final_docking(self) -> bool:
