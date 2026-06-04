@@ -5,3 +5,6 @@ float32 z
 float32 distance
 float32 theta
 float64 yaw
+float32 center_u
+float32 center_v
+float32 normalized_center_error

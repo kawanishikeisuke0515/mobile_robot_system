@@ -27,6 +27,8 @@ def generate_launch_description():
     yaw_distance_gain = LaunchConfiguration('yaw_distance_gain')
     yaw_weight_min = LaunchConfiguration('yaw_weight_min')
     angular_switch_distance = LaunchConfiguration('angular_switch_distance')
+    yaw_align_force_distance = LaunchConfiguration('yaw_align_force_distance')
+    yaw_align_center_error_threshold = LaunchConfiguration('yaw_align_center_error_threshold')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -137,7 +139,17 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'angular_switch_distance',
             default_value='2.0',
-            description='Distance threshold for switching angular error from theta to marker yaw',
+            description='Distance below which marker-yaw alignment may start',
+        ),
+        DeclareLaunchArgument(
+            'yaw_align_force_distance',
+            default_value='1.3',
+            description='Distance below which marker-yaw alignment is forced',
+        ),
+        DeclareLaunchArgument(
+            'yaw_align_center_error_threshold',
+            default_value='0.4',
+            description='Maximum normalized image-center error that allows marker-yaw alignment',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -175,6 +187,8 @@ def generate_launch_description():
                 'yaw_distance_gain': yaw_distance_gain,
                 'yaw_weight_min': yaw_weight_min,
                 'angular_switch_distance': angular_switch_distance,
+                'yaw_align_force_distance': yaw_align_force_distance,
+                'yaw_align_center_error_threshold': yaw_align_center_error_threshold,
             }],
         ),
         Node(

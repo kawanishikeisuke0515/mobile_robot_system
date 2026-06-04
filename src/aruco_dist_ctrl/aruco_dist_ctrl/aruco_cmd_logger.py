@@ -40,6 +40,9 @@ class ArucoCmdLogger(Node):
             'aruco_z',
             'aruco_theta',
             'aruco_yaw',
+            'aruco_center_u',
+            'aruco_center_v',
+            'aruco_normalized_center_error',
             'cmd_linear_x',
             'cmd_linear_y',
             'cmd_angular_z',
@@ -75,6 +78,11 @@ class ArucoCmdLogger(Node):
             self._format_optional(aruco.z if aruco is not None else None),
             self._format_optional(aruco.theta if aruco is not None else None),
             self._format_optional(aruco.yaw if aruco is not None else None),
+            self._format_optional(aruco.center_u if aruco is not None else None),
+            self._format_optional(aruco.center_v if aruco is not None else None),
+            self._format_optional(
+                aruco.normalized_center_error if aruco is not None else None
+            ),
             self._format_optional(cmd.linear.x if cmd is not None else None),
             self._format_optional(cmd.linear.y if cmd is not None else None),
             self._format_optional(cmd.angular.z if cmd is not None else None),

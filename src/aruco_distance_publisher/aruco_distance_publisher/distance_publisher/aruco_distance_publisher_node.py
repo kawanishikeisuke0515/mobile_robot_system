@@ -119,6 +119,7 @@ class ArucoDistancePublisher(Node):
         else:
             frame = frame[:, half_width:]
 
+        image_width = frame.shape[1]
         self.get_logger().debug(f"{self.camera_side} frame shape = {frame.shape}")
 
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
@@ -149,10 +150,15 @@ class ArucoDistancePublisher(Node):
             distance_m = math.sqrt(x_m * x_m + y_m * y_m + z_m * z_m)
             theta_rad = math.atan2(x_m, z_m)
             yaw_rad = _marker_yaw_from_rvec(rvec)
+            marker_corners = corners[i][0]
+            center_u = float(np.mean(marker_corners[:, 0]))
+            center_v = float(np.mean(marker_corners[:, 1]))
+            normalized_center_error = (center_u - image_width / 2.0) / (image_width / 2.0)
 
             self.get_logger().info(
                 f"id={int(marker_id)} x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} "
-                f"d={distance_m:.3f} theta={theta_rad:.3f} yaw={yaw_rad:.3f}"
+                f"d={distance_m:.3f} theta={theta_rad:.3f} yaw={yaw_rad:.3f} "
+                f"u={center_u:.1f} v={center_v:.1f} center_error={normalized_center_error:.3f}"
             )
 
             msg = ArucoDistance()
@@ -163,6 +169,9 @@ class ArucoDistancePublisher(Node):
             msg.distance = distance_m
             msg.theta = theta_rad
             msg.yaw = yaw_rad
+            msg.center_u = center_u
+            msg.center_v = center_v
+            msg.normalized_center_error = normalized_center_error
             self.publisher_.publish(msg)
 
 def main(args=None):
