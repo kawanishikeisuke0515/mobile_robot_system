@@ -292,7 +292,7 @@ if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
 
 ```yaml
 target_z: 1.3              # pre-docking target distance [m]
-kp_z: 1.0                  # forward/backward proportional gain
+kp_z: 0.4                  # forward/backward proportional gain
 min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]
@@ -304,7 +304,7 @@ min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
 x_tolerance: 0.01          # acceptable lateral error [m]
 target_yaw: 0.0            # target marker yaw [rad]
-kp_yaw: 0.3                # yaw proportional gain
+kp_yaw: 0.2                # yaw proportional gain
 min_angular_speed: 0.1     # retained for compatibility; weighted yaw does not use direct minimum speed
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
 yaw_tolerance: 0.01        # acceptable yaw error [rad]

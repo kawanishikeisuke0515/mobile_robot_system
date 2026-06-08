@@ -107,7 +107,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'kp_yaw',
-            default_value='0.3',
+            default_value='0.2',
             description='Proportional gain for yaw alignment control',
         ),
         DeclareLaunchArgument(
