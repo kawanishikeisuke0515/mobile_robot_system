@@ -49,11 +49,11 @@ normalized_center_error : horizontal marker-center error normalized by half imag
 - `y`: down direction in camera frame
 - `z`: forward direction in camera frame
 
-The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and both `theta` and `yaw` to compute angular motion.
+The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `yaw` to compute angular motion.
 
-- `theta`: used to keep the marker in view, especially at long range.
-- `yaw`: used to align the robot nearly perpendicular to the docking station, especially at short range.
-- `normalized_center_error`: used to decide when yaw alignment can start without losing marker visibility.
+- `theta`: published and logged as the marker-center bearing, but not used for angular control in this version.
+- `yaw`: used to align the robot nearly perpendicular to the docking station.
+- `normalized_center_error`: used as a marker-loss guard for angular motion.
 
 `aruco_distance_publisher` computes the marker image center from the four detected ArUco corners:
 
@@ -103,25 +103,21 @@ FINAL_DOCKING
 ```text
 forward_error = aruco_z - target_z
 lateral_error = aruco_x - target_x
-bearing_error = wrap_pi(-aruco_theta)
 perpendicular_error = wrap_pi(aruco_yaw - target_yaw)
 ```
 
-`aruco_theta` is positive when the marker center is to the camera-right side. The controller uses `-aruco_theta` so that the yaw command turns the robot toward the marker center.
+`aruco_theta` is positive when the marker center is to the camera-right side. In this version, it is kept for logging and analysis. Angular control uses only `aruco_yaw`.
 
-### Angular Error Switching
+### Angular Control
 
-The angular control target switches according to distance and marker visibility margin.
+The angular control target is always the marker yaw error. The marker image-center error is used only as a safety guard.
 
 ```text
 if abs(normalized_center_error) > yaw_align_center_error_threshold:
     angular_error = 0.0
     angular_enabled = false
-elif aruco_z <= angular_switch_distance:
-    angular_error = perpendicular_error
-    angular_enabled = true
 else:
-    angular_error = bearing_error
+    angular_error = perpendicular_error
     angular_enabled = true
 ```
 
@@ -131,10 +127,7 @@ Meaning:
 abs(normalized_center_error) > 0.4:
   stop angular.z at any distance to avoid losing the marker
 
-abs(normalized_center_error) <= 0.4 and z > 2.0 m:
-  prioritize marker visibility using theta
-
-abs(normalized_center_error) <= 0.4 and z <= 2.0 m:
+abs(normalized_center_error) <= 0.4:
   use yaw so the robot becomes perpendicular to the docking station
 ```
 
@@ -144,7 +137,7 @@ The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-do
 
 When the marker is near the image edge, angular motion is stopped and only translational control continues. This prevents the robot from rotating the marker out of view.
 
-When the marker is near the image center, the controller uses `theta` at long range to keep the marker visible and switches to `yaw` near the docking station to align perpendicular to the wall.
+When the marker is not near the image edge, the controller uses `yaw` to align perpendicular to the wall. There is no distance-based `theta` / `yaw` switching in this version.
 
 ```text
 position_error = abs(forward_error) + abs(lateral_error)
@@ -310,8 +303,7 @@ max_angular_speed: 0.5     # maximum yaw speed [rad/s]
 yaw_tolerance: 0.01        # acceptable yaw error [rad]
 yaw_distance_gain: 1.0     # position-error gain for yaw weighting
 yaw_weight_min: 0.2        # minimum yaw weight far from target
-angular_switch_distance: 2.0       # yaw alignment may start below this distance [m]
-yaw_align_center_error_threshold: 0.4  # yaw alignment may start only when abs(normalized_center_error) is below this value
+yaw_align_center_error_threshold: 0.4  # angular.z is stopped when abs(normalized_center_error) is above this value
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -377,7 +369,7 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 * Distance-based forward/backward control
 * Lateral alignment control
-* Distance- and image-center-dependent angular control switching between marker-center bearing and marker yaw
+* Image-center-guarded yaw alignment
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
 * Straight final docking using fixed `linear.x`
 * Safety stop (tolerance & timeout)
@@ -397,9 +389,7 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 * Validate forward/backward motion
 * Validate lateral motion direction
-* Validate theta-based yaw motion direction at long range
-* Validate yaw-based perpendicular alignment when marker is near image center
-* Tune `angular_switch_distance`
+* Validate yaw-based perpendicular alignment while the marker is not near the image edge
 * Tune `yaw_align_center_error_threshold`
 * Tune `yaw_distance_gain` and `yaw_weight_min`
 * Tune `docking_distance` and `final_forward_speed`

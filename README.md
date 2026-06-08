@@ -97,6 +97,9 @@ ros2 launch locomotion_core keyboard_teleop.launch.py teleop_prefix:="xterm -e"
   - distance
   - theta
   - yaw
+  - center_u
+  - center_v
+  - normalized_center_error
   
 ### Required mapping
 
@@ -108,14 +111,16 @@ robot velocity commands:
 - ArUco `z` → robot `linear.x` forward/backward motion
 - ArUco `x` → robot `linear.y` lateral motion
 - ArUco `yaw` → robot `angular.z` yaw motion
+- ArUco `normalized_center_error` → marker-loss guard for `angular.z`
 
 Example:
 
 cmd.linear.x = forward_cmd   # based on ArUco z
 cmd.linear.y = lateral_cmd   # based on -ArUco x
-cmd.angular.z = yaw_cmd      # based on ArUco yaw
+cmd.angular.z = yaw_cmd      # based on ArUco yaw, stopped near image edge
 
 The current controller uses `linear.x`, `linear.y`, and `angular.z`.
+During PRE_DOCKING, `angular.z` is controlled by marker yaw. If the marker center is near the image edge, `angular.z` is set to `0.0` to reduce the chance of losing the marker.
 
 ## Camera Calibration
 - Left calibration file path when running from source:
@@ -146,6 +151,8 @@ The current controller uses `linear.x`, `linear.y`, and `angular.z`.
    - distance = sqrt(x^2 + y^2 + z^2)
    - theta = atan2(x, z)
    - yaw = marker orientation angle from rvec
+   - center_u, center_v = average of the four detected marker corner pixels
+   - normalized_center_error = (center_u - image_width / 2) / (image_width / 2)
 8. Publish result to ROS2 topic
 
 ## Error Handling

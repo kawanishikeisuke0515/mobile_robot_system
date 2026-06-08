@@ -26,7 +26,6 @@ def generate_launch_description():
     yaw_tolerance = LaunchConfiguration('yaw_tolerance')
     yaw_distance_gain = LaunchConfiguration('yaw_distance_gain')
     yaw_weight_min = LaunchConfiguration('yaw_weight_min')
-    angular_switch_distance = LaunchConfiguration('angular_switch_distance')
     yaw_align_center_error_threshold = LaunchConfiguration('yaw_align_center_error_threshold')
 
     return LaunchDescription([
@@ -136,11 +135,6 @@ def generate_launch_description():
             description='Minimum yaw-control weight during PRE_DOCKING',
         ),
         DeclareLaunchArgument(
-            'angular_switch_distance',
-            default_value='2.0',
-            description='Distance below which marker-yaw alignment may start',
-        ),
-        DeclareLaunchArgument(
             'yaw_align_center_error_threshold',
             default_value='0.4',
             description='Maximum normalized image-center error that allows marker-yaw alignment',
@@ -180,7 +174,6 @@ def generate_launch_description():
                 'yaw_tolerance': yaw_tolerance,
                 'yaw_distance_gain': yaw_distance_gain,
                 'yaw_weight_min': yaw_weight_min,
-                'angular_switch_distance': angular_switch_distance,
                 'yaw_align_center_error_threshold': yaw_align_center_error_threshold,
             }],
         ),
