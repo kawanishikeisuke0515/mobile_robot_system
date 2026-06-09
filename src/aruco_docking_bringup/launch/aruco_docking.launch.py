@@ -20,13 +20,11 @@ def generate_launch_description():
     max_lateral_speed = LaunchConfiguration('max_lateral_speed')
     x_tolerance = LaunchConfiguration('x_tolerance')
     target_yaw = LaunchConfiguration('target_yaw')
-    kp_yaw = LaunchConfiguration('kp_yaw')
+    kp_center = LaunchConfiguration('kp_center')
+    center_deadband = LaunchConfiguration('center_deadband')
     min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
     yaw_tolerance = LaunchConfiguration('yaw_tolerance')
-    yaw_distance_gain = LaunchConfiguration('yaw_distance_gain')
-    yaw_weight_min = LaunchConfiguration('yaw_weight_min')
-    yaw_align_center_error_threshold = LaunchConfiguration('yaw_align_center_error_threshold')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -51,7 +49,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_forward_speed',
-            default_value='0.3',
+            default_value='0.25',
             description='Minimum forward/backward command outside z_tolerance',
         ),
         DeclareLaunchArgument(
@@ -86,7 +84,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_lateral_speed',
-            default_value='0.3',
+            default_value='0.1',
             description='Minimum lateral command outside x_tolerance',
         ),
         DeclareLaunchArgument(
@@ -105,14 +103,19 @@ def generate_launch_description():
             description='Target marker yaw angle in radians',
         ),
         DeclareLaunchArgument(
-            'kp_yaw',
-            default_value='0.2',
-            description='Proportional gain for yaw alignment control',
+            'kp_center',
+            default_value='0.3',
+            description='Proportional gain for marker image-centering angular control',
+        ),
+        DeclareLaunchArgument(
+            'center_deadband',
+            default_value='0.05',
+            description='Normalized image-center error deadband for angular control',
         ),
         DeclareLaunchArgument(
             'min_angular_speed',
             default_value='0.1',
-            description='Retained for compatibility; weighted yaw control does not apply direct minimum speed',
+            description='Retained for compatibility; marker-centering control does not apply direct minimum speed',
         ),
         DeclareLaunchArgument(
             'max_angular_speed',
@@ -122,22 +125,7 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'yaw_tolerance',
             default_value='0.01',
-            description='Yaw error tolerance in radians',
-        ),
-        DeclareLaunchArgument(
-            'yaw_distance_gain',
-            default_value='1.0',
-            description='Position-error gain used to weaken yaw control far from the pre-docking target',
-        ),
-        DeclareLaunchArgument(
-            'yaw_weight_min',
-            default_value='0.2',
-            description='Minimum yaw-control weight during PRE_DOCKING',
-        ),
-        DeclareLaunchArgument(
-            'yaw_align_center_error_threshold',
-            default_value='0.4',
-            description='Maximum normalized image-center error that allows marker-yaw alignment',
+            description='Yaw error tolerance in radians, used for logging/evaluation',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -168,13 +156,11 @@ def generate_launch_description():
                 'max_lateral_speed': max_lateral_speed,
                 'x_tolerance': x_tolerance,
                 'target_yaw': target_yaw,
-                'kp_yaw': kp_yaw,
+                'kp_center': kp_center,
+                'center_deadband': center_deadband,
                 'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
                 'yaw_tolerance': yaw_tolerance,
-                'yaw_distance_gain': yaw_distance_gain,
-                'yaw_weight_min': yaw_weight_min,
-                'yaw_align_center_error_threshold': yaw_align_center_error_threshold,
             }],
         ),
         Node(

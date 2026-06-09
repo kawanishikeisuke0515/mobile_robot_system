@@ -27,24 +27,22 @@ class ArucoDistanceController(Node):
 
         self.declare_parameter('target_z', 1.3)
         self.declare_parameter('kp_z', 0.4)
-        self.declare_parameter('min_forward_speed', 0.3)
+        self.declare_parameter('min_forward_speed', 0.25)
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.01)
         self.declare_parameter('docking_distance', 1.0)
         self.declare_parameter('final_forward_speed', 0.4)
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('kp_x', 1.0)
-        self.declare_parameter('min_lateral_speed', 0.3)
+        self.declare_parameter('min_lateral_speed', 0.1)
         self.declare_parameter('max_lateral_speed', 0.95)
         self.declare_parameter('x_tolerance', 0.01)
         self.declare_parameter('target_yaw', 0.0)
-        self.declare_parameter('kp_yaw', 0.2)
+        self.declare_parameter('kp_center', 0.3)
+        self.declare_parameter('center_deadband', 0.05)
         self.declare_parameter('min_angular_speed', 0.1)
         self.declare_parameter('max_angular_speed', 0.5)
         self.declare_parameter('yaw_tolerance', 0.01)
-        self.declare_parameter('yaw_distance_gain', 1.0)
-        self.declare_parameter('yaw_weight_min', 0.2)
-        self.declare_parameter('yaw_align_center_error_threshold', 0.4)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
@@ -61,15 +59,11 @@ class ArucoDistanceController(Node):
         self.max_lateral_speed = float(self.get_parameter('max_lateral_speed').value)
         self.x_tolerance = float(self.get_parameter('x_tolerance').value)
         self.target_yaw = float(self.get_parameter('target_yaw').value)
-        self.kp_yaw = float(self.get_parameter('kp_yaw').value)
+        self.kp_center = float(self.get_parameter('kp_center').value)
+        self.center_deadband = float(self.get_parameter('center_deadband').value)
         self.min_angular_speed = float(self.get_parameter('min_angular_speed').value)
         self.max_angular_speed = float(self.get_parameter('max_angular_speed').value)
         self.yaw_tolerance = float(self.get_parameter('yaw_tolerance').value)
-        self.yaw_distance_gain = float(self.get_parameter('yaw_distance_gain').value)
-        self.yaw_weight_min = float(self.get_parameter('yaw_weight_min').value)
-        self.yaw_align_center_error_threshold = float(
-            self.get_parameter('yaw_align_center_error_threshold').value
-        )
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
 
@@ -102,10 +96,9 @@ class ArucoDistanceController(Node):
             'target_z=%.3f kp_z=%.3f min_forward_speed=%.3f max_forward_speed=%.3f '
             'z_tolerance=%.3f docking_distance=%.3f final_forward_speed=%.3f '
             'target_x=%.3f kp_x=%.3f min_lateral_speed=%.3f '
-            'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f kp_yaw=%.3f '
-            'max_angular_speed=%.3f yaw_tolerance=%.3f yaw_distance_gain=%.3f '
-            'yaw_weight_min=%.3f yaw_align_center_error_threshold=%.3f detection_timeout=%.3f '
-            'control_rate=%.1f'
+            'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f '
+            'kp_center=%.3f center_deadband=%.3f max_angular_speed=%.3f '
+            'yaw_tolerance=%.3f detection_timeout=%.3f control_rate=%.1f'
             % (
                 self.target_z,
                 self.kp_z,
@@ -120,12 +113,10 @@ class ArucoDistanceController(Node):
                 self.max_lateral_speed,
                 self.x_tolerance,
                 self.target_yaw,
-                self.kp_yaw,
+                self.kp_center,
+                self.center_deadband,
                 self.max_angular_speed,
                 self.yaw_tolerance,
-                self.yaw_distance_gain,
-                self.yaw_weight_min,
-                self.yaw_align_center_error_threshold,
                 self.detection_timeout,
                 self.control_rate,
             )
@@ -156,6 +147,10 @@ class ArucoDistanceController(Node):
             raise ValueError('min_lateral_speed must be less than or equal to max_lateral_speed')
         if self.x_tolerance < 0.0:
             raise ValueError('x_tolerance must be greater than or equal to 0')
+        if self.kp_center < 0.0:
+            raise ValueError('kp_center must be greater than or equal to 0')
+        if self.center_deadband < 0.0:
+            raise ValueError('center_deadband must be greater than or equal to 0')
         if self.min_angular_speed < 0.0:
             raise ValueError('min_angular_speed must be greater than or equal to 0')
         if self.max_angular_speed < 0.0:
@@ -164,14 +159,6 @@ class ArucoDistanceController(Node):
             raise ValueError('min_angular_speed must be less than or equal to max_angular_speed')
         if self.yaw_tolerance < 0.0:
             raise ValueError('yaw_tolerance must be greater than or equal to 0')
-        if self.yaw_distance_gain < 0.0:
-            raise ValueError('yaw_distance_gain must be greater than or equal to 0')
-        if not 0.0 <= self.yaw_weight_min <= 1.0:
-            raise ValueError('yaw_weight_min must be between 0 and 1')
-        if self.yaw_align_center_error_threshold < 0.0:
-            raise ValueError(
-                'yaw_align_center_error_threshold must be greater than or equal to 0'
-            )
         if self.detection_timeout <= 0.0:
             raise ValueError('detection_timeout must be greater than 0')
         if self.control_rate <= 0.0:
@@ -228,10 +215,7 @@ class ArucoDistanceController(Node):
         cmd = Twist()
         cmd.linear.x = self._calculate_forward_velocity(self.latest_z)
         cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
-        cmd.angular.z = self._calculate_weighted_angular_velocity(
-            self.latest_z,
-            self.latest_x,
-            self.latest_yaw,
+        cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
         return cmd
@@ -242,20 +226,19 @@ class ArucoDistanceController(Node):
             return cmd
 
         cmd.linear.x = self.final_forward_speed
+        cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
+        cmd.angular.z = self._calculate_angular_velocity(
+            self.latest_normalized_center_error,
+        )
         return cmd
 
     def _is_ready_for_final_docking(self) -> bool:
         forward_error = self.latest_z - self.target_z
         lateral_error = self.latest_x - self.target_x
-        angular_error, angular_enabled = self._calculate_angular_control(
-            self.latest_yaw,
-            self.latest_normalized_center_error,
-        )
         return (
             abs(forward_error) < self.z_tolerance
             and abs(lateral_error) < self.x_tolerance
-            and angular_enabled
-            and abs(angular_error) < self.yaw_tolerance
+            and abs(self.latest_normalized_center_error) < self.center_deadband
         )
 
     def _calculate_forward_velocity(self, aruco_z: float) -> float:
@@ -274,39 +257,19 @@ class ArucoDistanceController(Node):
 
         return velocity
 
-    def _calculate_weighted_angular_velocity(
-        self,
-        aruco_z: float,
-        aruco_x: float,
-        aruco_yaw: float,
-        normalized_center_error: float,
-    ) -> float:
-        position_error = abs(aruco_z - self.target_z) + abs(aruco_x - self.target_x)
-        weight = self.yaw_weight_min + (
-            (1.0 - self.yaw_weight_min) / (1.0 + self.yaw_distance_gain * position_error)
-        )
-        return self._calculate_angular_velocity(
-            aruco_yaw,
-            normalized_center_error,
-            weight,
-        )
-
     def _calculate_angular_velocity(
         self,
-        aruco_yaw: float,
         normalized_center_error: float,
-        weight: float,
     ) -> float:
         angular_error, angular_enabled = self._calculate_angular_control(
-            aruco_yaw,
             normalized_center_error,
         )
         if not angular_enabled:
             return 0.0
-        if abs(angular_error) < self.yaw_tolerance:
+        if abs(angular_error) < self.center_deadband:
             return 0.0
 
-        velocity = self.kp_yaw * angular_error * weight
+        velocity = self.kp_center * angular_error
         velocity = _clamp(
             velocity,
             -self.max_angular_speed,
@@ -317,13 +280,12 @@ class ArucoDistanceController(Node):
 
     def _calculate_angular_control(
         self,
-        aruco_yaw: float,
         normalized_center_error: float,
     ) -> tuple[float, bool]:
-        if abs(normalized_center_error) > self.yaw_align_center_error_threshold:
+        if abs(normalized_center_error) < self.center_deadband:
             return 0.0, False
 
-        return _wrap_pi(aruco_yaw - self.target_yaw), True
+        return -normalized_center_error, True
 
     def _calculate_lateral_velocity(self, aruco_x: float) -> float:
         error_x = aruco_x - self.target_x

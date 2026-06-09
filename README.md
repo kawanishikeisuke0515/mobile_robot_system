@@ -110,17 +110,17 @@ robot velocity commands:
 
 - ArUco `z` → robot `linear.x` forward/backward motion
 - ArUco `x` → robot `linear.y` lateral motion
-- ArUco `yaw` → robot `angular.z` yaw motion
-- ArUco `normalized_center_error` → marker-loss guard for `angular.z`
+- ArUco `normalized_center_error` → robot `angular.z` marker-centering motion
+- ArUco `yaw` → logged for evaluating docking posture
 
 Example:
 
 cmd.linear.x = forward_cmd   # based on ArUco z
 cmd.linear.y = lateral_cmd   # based on -ArUco x
-cmd.angular.z = yaw_cmd      # based on ArUco yaw, stopped near image edge
+cmd.angular.z = center_cmd   # based on normalized_center_error
 
 The current controller uses `linear.x`, `linear.y`, and `angular.z`.
-During PRE_DOCKING, `angular.z` is controlled by marker yaw. If the marker center is near the image edge, `angular.z` is set to `0.0` to reduce the chance of losing the marker.
+During PRE_DOCKING and FINAL_DOCKING, `angular.z` is controlled to keep the marker near the image center. Marker yaw is logged so experiments can check whether the robot naturally approaches a perpendicular docking posture.
 
 ## Camera Calibration
 - Left calibration file path when running from source:

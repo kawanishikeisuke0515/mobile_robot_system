@@ -49,11 +49,11 @@ normalized_center_error : horizontal marker-center error normalized by half imag
 - `y`: down direction in camera frame
 - `z`: forward direction in camera frame
 
-The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `yaw` to compute angular motion.
+The controller uses `z` to compute forward/backward motion, `x` to compute lateral motion, and `normalized_center_error` to compute angular motion.
 
 - `theta`: published and logged as the marker-center bearing, but not used for angular control in this version.
-- `yaw`: used to align the robot nearly perpendicular to the docking station.
-- `normalized_center_error`: used as a marker-loss guard for angular motion.
+- `yaw`: published and logged to evaluate whether the robot naturally becomes perpendicular to the docking station.
+- `normalized_center_error`: used to rotate the robot so the marker stays near the image center.
 
 `aruco_distance_publisher` computes the marker image center from the four detected ArUco corners:
 
@@ -103,62 +103,55 @@ FINAL_DOCKING
 ```text
 forward_error = aruco_z - target_z
 lateral_error = aruco_x - target_x
-perpendicular_error = wrap_pi(aruco_yaw - target_yaw)
+center_error = normalized_center_error
 ```
 
-`aruco_theta` is positive when the marker center is to the camera-right side. In this version, it is kept for logging and analysis. Angular control uses only `aruco_yaw`.
+`aruco_theta` is positive when the marker center is to the camera-right side. `aruco_yaw` is the marker orientation relative to the camera. In this version, both are kept for logging and analysis. Angular control uses only `normalized_center_error`.
 
 ### Angular Control
 
-The angular control target is always the marker yaw error. The marker image-center error is used only as a safety guard.
+The angular control target is the marker image-center error. The robot rotates only when the marker center is outside a small deadband.
 
 ```text
-if abs(normalized_center_error) > yaw_align_center_error_threshold:
+if abs(center_error) < center_deadband:
     angular_error = 0.0
     angular_enabled = false
 else:
-    angular_error = perpendicular_error
+    angular_error = -center_error
     angular_enabled = true
 ```
 
 Meaning:
 
 ```text
-abs(normalized_center_error) > 0.4:
-  stop angular.z at any distance to avoid losing the marker
+abs(normalized_center_error) < 0.05:
+  marker is close enough to the image center, so stop angular.z
 
-abs(normalized_center_error) <= 0.4:
-  use yaw so the robot becomes perpendicular to the docking station
+abs(normalized_center_error) >= 0.05:
+  rotate to bring the marker center back toward the image center
 ```
 
 ### PRE_DOCKING
 
 The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-docking pose `P1` while preparing both position and posture for docking.
 
-When the marker is near the image edge, angular motion is stopped and only translational control continues. This prevents the robot from rotating the marker out of view.
-
-When the marker is not near the image edge, the controller uses `yaw` to align perpendicular to the wall. There is no distance-based `theta` / `yaw` switching in this version.
+The controller does not directly command wall-perpendicular yaw in `PRE_DOCKING`. Instead, it keeps the marker centered in the camera image while independently reducing the 3D lateral error with `linear.y`. The experiment should verify from logs whether `aruco_yaw` naturally approaches the desired perpendicular posture.
 
 ```text
-position_error = abs(forward_error) + abs(lateral_error)
-weight = yaw_weight_min + (1.0 - yaw_weight_min) / (1.0 + yaw_distance_gain * position_error)
-
 cmd.linear.x = kp_z * forward_error
 cmd.linear.y = -kp_x * lateral_error
 
 if angular_enabled:
-    cmd.angular.z = kp_yaw * angular_error * weight
+    cmd.angular.z = kp_center * angular_error
 else:
     cmd.angular.z = 0.0
 ```
-
-`weight` approaches `yaw_weight_min` when the robot is far from the target, and approaches `1.0` near the target. This suppresses unnecessary rotation at long range while keeping angular control active.
 
 ### FINAL_DOCKING
 
 The purpose of `FINAL_DOCKING` is to move from the pre-docking pose `P1` to the final docking pose `P2`.
 
-This state uses a simple straight final approach from an already aligned pose.
+This state keeps the fixed forward approach speed, while continuing proportional lateral correction and marker image-centering angular correction.
 
 ```text
 if aruco_z <= docking_distance:
@@ -167,8 +160,11 @@ if aruco_z <= docking_distance:
     cmd.angular.z = 0.0
 else:
     cmd.linear.x = final_forward_speed
-    cmd.linear.y = 0.0
-    cmd.angular.z = 0.0
+    cmd.linear.y = -kp_x * lateral_error
+    if angular_enabled:
+        cmd.angular.z = kp_center * angular_error
+    else:
+        cmd.angular.z = 0.0
 ```
 
 There is no separate `DOCKED` state. After the final stop condition is reached, the controller keeps publishing zero velocity while staying in `FINAL_DOCKING`.
@@ -185,15 +181,14 @@ The controller switches from `PRE_DOCKING` to `FINAL_DOCKING` only when a recent
 marker_visible == true
 abs(aruco_z - target_z) < z_tolerance
 abs(aruco_x - target_x) < x_tolerance
-angular_enabled == true
-abs(angular_error) < yaw_tolerance
+abs(normalized_center_error) < center_deadband
 ```
 
 In the implementation, `marker_visible == true` means `/aruco/distance` has been received within `detection_timeout`.
 
 ### FINAL_DOCKING Stop Condition
 
-Once the controller is in `FINAL_DOCKING`, it keeps moving straight until the marker reaches the final stop distance:
+Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until the marker reaches the final stop distance:
 
 ```text
 if aruco_z <= docking_distance:
@@ -214,12 +209,14 @@ PRE_DOCKING:
   aruco_z < target_z    → robot moves backward
   aruco_x > target_x    → robot moves in negative lateral direction
   aruco_x < target_x    → robot moves in positive lateral direction
-  angular error switches according to distance and image-center error
-  angular.z stops in the intermediate range when the marker is near the image edge
-  angular command is corrected with position-error-based weighting
+  normalized_center_error > center_deadband  → robot rotates to move the marker toward image center
+  normalized_center_error < -center_deadband → robot rotates to move the marker toward image center
+  abs(normalized_center_error) < center_deadband → angular.z stops
 
 FINAL_DOCKING:
   aruco_z > docking_distance  → robot moves forward at final_forward_speed
+  aruco_x is corrected with proportional lateral control
+  normalized_center_error is corrected with proportional angular control
   aruco_z <= docking_distance → robot stops
 ```
 
@@ -236,7 +233,7 @@ if abs(lateral_error) < x_tolerance:
     cmd.linear.y = 0.0
 if angular_enabled == false:
     cmd.angular.z = 0.0
-elif abs(angular_error) < yaw_tolerance:
+elif abs(center_error) < center_deadband:
     cmd.angular.z = 0.0
 ```
 
@@ -270,7 +267,7 @@ cmd.angular.z = clamp(cmd.angular.z,
 
 If the robot is outside `z_tolerance`, the command keeps at least `min_forward_speed`. If the robot is outside `x_tolerance`, the command keeps at least `min_lateral_speed`. Both preserve the command direction.
 
-Yaw control does not use direct minimum angular speed in `PRE_DOCKING`. Instead, it uses `yaw_weight_min` so angular control is weakened far from the pre-docking target but does not vanish.
+Marker-centering control does not use direct minimum angular speed in `PRE_DOCKING`.
 
 ```text
 if 0.0 < abs(cmd.linear.x) < min_forward_speed:
@@ -286,24 +283,22 @@ if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
 ```yaml
 target_z: 1.3              # pre-docking target distance [m]
 kp_z: 0.4                  # forward/backward proportional gain
-min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
+min_forward_speed: 0.25    # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
 final_forward_speed: 0.4   # fixed forward speed in FINAL_DOCKING [m/s]
 target_x: 0.0              # target lateral offset [m]
 kp_x: 1.0                  # lateral proportional gain
-min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
+min_lateral_speed: 0.1     # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
 x_tolerance: 0.01          # acceptable lateral error [m]
-target_yaw: 0.0            # target marker yaw [rad]
-kp_yaw: 0.2                # yaw proportional gain
-min_angular_speed: 0.1     # retained for compatibility; weighted yaw does not use direct minimum speed
+target_yaw: 0.0            # target marker yaw [rad], used for logging/evaluation
+kp_center: 0.3             # marker image-centering proportional gain
+center_deadband: 0.05      # normalized center-error deadband
+min_angular_speed: 0.1     # retained for compatibility; marker-centering control does not use direct minimum speed
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
-yaw_tolerance: 0.01        # acceptable yaw error [rad]
-yaw_distance_gain: 1.0     # position-error gain for yaw weighting
-yaw_weight_min: 0.2        # minimum yaw weight far from target
-yaw_align_center_error_threshold: 0.4  # angular.z is stopped when abs(normalized_center_error) is above this value
+yaw_tolerance: 0.01        # acceptable yaw error [rad], used for logging/evaluation
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -369,9 +364,9 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 * Distance-based forward/backward control
 * Lateral alignment control
-* Image-center-guarded yaw alignment
+* Marker image-centering angular control
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
-* Straight final docking using fixed `linear.x`
+* Final docking using fixed `linear.x` with proportional `linear.y` and `angular.z` correction
 * Safety stop (tolerance & timeout)
 
 ---
@@ -389,7 +384,7 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 
 * Validate forward/backward motion
 * Validate lateral motion direction
-* Validate yaw-based perpendicular alignment while the marker is not near the image edge
-* Tune `yaw_align_center_error_threshold`
-* Tune `yaw_distance_gain` and `yaw_weight_min`
+* Validate marker image-centering direction
+* Check whether logged `aruco_yaw` naturally approaches the target posture
+* Tune `center_deadband`
 * Tune `docking_distance` and `final_forward_speed`
