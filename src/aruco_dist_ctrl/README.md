@@ -101,12 +101,20 @@ FINAL_DOCKING
 ### Error Definition
 
 ```text
-forward_error = aruco_z - target_z
-lateral_error = aruco_x - target_x
+theta = wrap_pi(aruco_yaw - target_yaw)
+d = aruco_z
+
+estimated_x = d * sin(theta)
+estimated_z = d * cos(theta)
+
+forward_error = estimated_z - target_z
+lateral_error = estimated_x - target_x
 center_error = normalized_center_error
 ```
 
-`aruco_theta` is positive when the marker center is to the camera-right side. `aruco_yaw` is the marker orientation relative to the camera. In this version, both are kept for logging and analysis. Angular control uses only `normalized_center_error`.
+`aruco_theta` is positive when the marker center is to the camera-right side. In this version, `aruco_theta` is kept for logging and analysis.
+
+`theta` in the controller is the marker yaw error, which represents the tilt between the robot and the docking wall. The controller uses `aruco_z` as `d`, assuming that marker-centering angular control keeps the camera approximately facing the marker center.
 
 ### Angular Control
 
@@ -135,7 +143,7 @@ abs(normalized_center_error) >= 0.05:
 
 The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-docking pose `P1` while preparing both position and posture for docking.
 
-The controller does not directly command wall-perpendicular yaw in `PRE_DOCKING`. Instead, it keeps the marker centered in the camera image while independently reducing the 3D lateral error with `linear.y`. The experiment should verify from logs whether `aruco_yaw` naturally approaches the desired perpendicular posture.
+The controller does not directly command wall-perpendicular yaw in `PRE_DOCKING`. Instead, it keeps the marker centered in the camera image and uses the wall-yaw estimate to compute `estimated_x` and `estimated_z` for translational control.
 
 ```text
 cmd.linear.x = kp_z * forward_error
@@ -179,8 +187,8 @@ The controller switches from `PRE_DOCKING` to `FINAL_DOCKING` only when a recent
 
 ```text
 marker_visible == true
-abs(aruco_z - target_z) < z_tolerance
-abs(aruco_x - target_x) < x_tolerance
+abs(estimated_z - target_z) < z_tolerance
+abs(estimated_x - target_x) < x_tolerance
 abs(normalized_center_error) < center_deadband
 ```
 
@@ -205,17 +213,17 @@ If ArUco detection times out during `FINAL_DOCKING`, the controller publishes ze
 
 ```text
 PRE_DOCKING:
-  aruco_z > target_z    → robot moves forward
-  aruco_z < target_z    → robot moves backward
-  aruco_x > target_x    → robot moves in negative lateral direction
-  aruco_x < target_x    → robot moves in positive lateral direction
+  estimated_z > target_z    → robot moves forward
+  estimated_z < target_z    → robot moves backward
+  estimated_x > target_x    → robot moves in negative lateral direction
+  estimated_x < target_x    → robot moves in positive lateral direction
   normalized_center_error > center_deadband  → robot rotates to move the marker toward image center
   normalized_center_error < -center_deadband → robot rotates to move the marker toward image center
   abs(normalized_center_error) < center_deadband → angular.z stops
 
 FINAL_DOCKING:
   aruco_z > docking_distance  → robot moves forward at final_forward_speed
-  aruco_x is corrected with proportional lateral control
+  estimated_x is corrected with proportional lateral control
   normalized_center_error is corrected with proportional angular control
   aruco_z <= docking_distance → robot stops
 ```

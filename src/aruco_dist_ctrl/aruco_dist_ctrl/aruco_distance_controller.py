@@ -213,8 +213,12 @@ class ArucoDistanceController(Node):
 
     def _calculate_pre_docking_command(self) -> Twist:
         cmd = Twist()
-        cmd.linear.x = self._calculate_forward_velocity(self.latest_z)
-        cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
+        estimated_x, estimated_z = self._estimate_wall_relative_position(
+            self.latest_z,
+            self.latest_yaw,
+        )
+        cmd.linear.x = self._calculate_forward_velocity(estimated_z)
+        cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
@@ -226,20 +230,38 @@ class ArucoDistanceController(Node):
             return cmd
 
         cmd.linear.x = self.final_forward_speed
-        cmd.linear.y = self._calculate_lateral_velocity(self.latest_x)
+        estimated_x, _ = self._estimate_wall_relative_position(
+            self.latest_z,
+            self.latest_yaw,
+        )
+        cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
         return cmd
 
     def _is_ready_for_final_docking(self) -> bool:
-        forward_error = self.latest_z - self.target_z
-        lateral_error = self.latest_x - self.target_x
+        estimated_x, estimated_z = self._estimate_wall_relative_position(
+            self.latest_z,
+            self.latest_yaw,
+        )
+        forward_error = estimated_z - self.target_z
+        lateral_error = estimated_x - self.target_x
         return (
             abs(forward_error) < self.z_tolerance
             and abs(lateral_error) < self.x_tolerance
             and abs(self.latest_normalized_center_error) < self.center_deadband
         )
+
+    def _estimate_wall_relative_position(
+        self,
+        aruco_z: float,
+        aruco_yaw: float,
+    ) -> tuple[float, float]:
+        theta = _wrap_pi(aruco_yaw - self.target_yaw)
+        estimated_x = aruco_z * math.sin(theta)
+        estimated_z = aruco_z * math.cos(theta)
+        return estimated_x, estimated_z
 
     def _calculate_forward_velocity(self, aruco_z: float) -> float:
         error_z = aruco_z - self.target_z
