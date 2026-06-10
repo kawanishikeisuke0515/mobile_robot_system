@@ -112,7 +112,7 @@ lateral_error = estimated_x - target_x
 center_error = normalized_center_error
 ```
 
-`aruco_theta` is positive when the marker center is to the camera-right side. In this version, `aruco_theta` is kept for logging and analysis.
+`aruco_theta` is positive when the marker center is to the camera-right side. In this version, `aruco_theta` is published by the distance publisher but not used by the controller.
 
 `theta` in the controller is the marker yaw error, which represents the tilt between the robot and the docking wall. The controller uses `aruco_z` as `d`, assuming that marker-centering angular control keeps the camera approximately facing the marker center.
 
@@ -342,12 +342,13 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 
 ## Logging ArUco and Command Velocity
 
-Run this logger during experiments to save `/aruco/distance` and `/rov_cmd_vel` into one time-aligned CSV file.
+Run this logger during experiments to save `/aruco/distance`, the OptiTrack pose, and `/rov_cmd_vel` into one time-aligned CSV file.
 
 ```bash
 ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
   -p output_dir:=/tmp/aruco_docking_logs \
-  -p log_rate:=20.0
+  -p log_rate:=20.0 \
+  -p optitrack_pose_topic:=/vrpn_mocap/RigidBody_1/pose
 ```
 
 The logger writes:
@@ -359,8 +360,9 @@ aruco_cmd_log_<timestamp>.csv
 Main columns:
 
 ```text
-elapsed_sec, aruco_x, aruco_z, aruco_theta, aruco_yaw,
-aruco_center_u, aruco_center_v, aruco_normalized_center_error,
+elapsed_sec, aruco_z, aruco_yaw, aruco_normalized_center_error,
+aruco_z_cos_yaw, aruco_z_sin_yaw,
+optitrack_x, optitrack_y, optitrack_z,
 cmd_linear_x, cmd_linear_y, cmd_angular_z
 ```
 

@@ -65,9 +65,7 @@ class ArucoDistanceController(Node):
 
         self._validate_parameters()
 
-        self.latest_x: Optional[float] = None
         self.latest_z: Optional[float] = None
-        self.latest_theta: Optional[float] = None
         self.latest_yaw: Optional[float] = None
         self.latest_normalized_center_error: Optional[float] = None
         self.last_detection_time: Optional[Time] = None
@@ -153,9 +151,7 @@ class ArucoDistanceController(Node):
             raise ValueError('control_rate must be greater than 0')
 
     def distance_callback(self, msg: ArucoDistance):
-        self.latest_x = float(msg.x)
         self.latest_z = float(msg.z)
-        self.latest_theta = float(msg.theta)
         self.latest_yaw = float(msg.yaw)
         self.latest_normalized_center_error = float(msg.normalized_center_error)
         self.last_detection_time = self.get_clock().now()
@@ -188,8 +184,7 @@ class ArucoDistanceController(Node):
 
     def _has_recent_detection(self) -> bool:
         if (
-            self.latest_x is None
-            or self.latest_z is None
+            self.latest_z is None
             or self.latest_yaw is None
             or self.latest_normalized_center_error is None
             or self.last_detection_time is None
@@ -313,8 +308,8 @@ class ArucoDistanceController(Node):
 
         return -normalized_center_error, True
 
-    def _calculate_lateral_velocity(self, aruco_x: float) -> float:
-        error_x = aruco_x - self.target_x
+    def _calculate_lateral_velocity(self, estimated_x: float) -> float:
+        error_x = estimated_x - self.target_x
         if abs(error_x) < self.x_tolerance:
             return 0.0
 
