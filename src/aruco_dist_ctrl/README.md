@@ -290,7 +290,7 @@ if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
 
 ```yaml
 target_z: 1.3              # pre-docking target distance [m]
-kp_z: 0.4                  # forward/backward proportional gain
+kp_z: 2.0                  # forward/backward proportional gain
 min_forward_speed: 0.25    # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]

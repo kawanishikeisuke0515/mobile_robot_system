@@ -26,7 +26,7 @@ class ArucoDistanceController(Node):
         super().__init__('aruco_distance_controller')
 
         self.declare_parameter('target_z', 1.3)
-        self.declare_parameter('kp_z', 0.4)
+        self.declare_parameter('kp_z', 2.0)
         self.declare_parameter('min_forward_speed', 0.25)
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.01)

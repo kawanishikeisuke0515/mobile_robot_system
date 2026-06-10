@@ -42,7 +42,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'kp_z',
-            default_value='0.4',
+            default_value='2.0',
             description='Proportional gain for forward/backward distance control',
         ),
         DeclareLaunchArgument(
