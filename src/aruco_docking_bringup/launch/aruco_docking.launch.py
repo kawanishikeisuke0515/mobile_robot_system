@@ -13,7 +13,6 @@ def generate_launch_description():
     max_forward_speed = LaunchConfiguration('max_forward_speed')
     z_tolerance = LaunchConfiguration('z_tolerance')
     docking_distance = LaunchConfiguration('docking_distance')
-    final_forward_speed = LaunchConfiguration('final_forward_speed')
     target_x = LaunchConfiguration('target_x')
     kp_x = LaunchConfiguration('kp_x')
     min_lateral_speed = LaunchConfiguration('min_lateral_speed')
@@ -24,7 +23,6 @@ def generate_launch_description():
     center_deadband = LaunchConfiguration('center_deadband')
     min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
-    yaw_tolerance = LaunchConfiguration('yaw_tolerance')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -68,23 +66,18 @@ def generate_launch_description():
             description='Final stop distance from the marker in meters',
         ),
         DeclareLaunchArgument(
-            'final_forward_speed',
-            default_value='0.4',
-            description='Fixed forward command used during FINAL_DOCKING',
-        ),
-        DeclareLaunchArgument(
             'target_x',
             default_value='0.0',
             description='Target lateral marker offset in meters',
         ),
         DeclareLaunchArgument(
             'kp_x',
-            default_value='1.0',
+            default_value='0.4',
             description='Proportional gain for lateral alignment control',
         ),
         DeclareLaunchArgument(
             'min_lateral_speed',
-            default_value='0.1',
+            default_value='0.25',
             description='Minimum lateral command outside x_tolerance',
         ),
         DeclareLaunchArgument(
@@ -122,11 +115,6 @@ def generate_launch_description():
             default_value='0.5',
             description='Maximum yaw command',
         ),
-        DeclareLaunchArgument(
-            'yaw_tolerance',
-            default_value='0.01',
-            description='Yaw error tolerance in radians, used for logging/evaluation',
-        ),
         Node(
             package='aruco_distance_publisher',
             executable='aruco_distance_publisher',
@@ -149,7 +137,6 @@ def generate_launch_description():
                 'max_forward_speed': max_forward_speed,
                 'z_tolerance': z_tolerance,
                 'docking_distance': docking_distance,
-                'final_forward_speed': final_forward_speed,
                 'target_x': target_x,
                 'kp_x': kp_x,
                 'min_lateral_speed': min_lateral_speed,
@@ -160,7 +147,6 @@ def generate_launch_description():
                 'center_deadband': center_deadband,
                 'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
-                'yaw_tolerance': yaw_tolerance,
             }],
         ),
         Node(

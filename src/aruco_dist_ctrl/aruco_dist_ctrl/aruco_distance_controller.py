@@ -31,10 +31,9 @@ class ArucoDistanceController(Node):
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.01)
         self.declare_parameter('docking_distance', 1.0)
-        self.declare_parameter('final_forward_speed', 0.4)
         self.declare_parameter('target_x', 0.0)
-        self.declare_parameter('kp_x', 1.0)
-        self.declare_parameter('min_lateral_speed', 0.1)
+        self.declare_parameter('kp_x', 0.4)
+        self.declare_parameter('min_lateral_speed', 0.25)
         self.declare_parameter('max_lateral_speed', 0.95)
         self.declare_parameter('x_tolerance', 0.01)
         self.declare_parameter('target_yaw', 0.0)
@@ -42,7 +41,6 @@ class ArucoDistanceController(Node):
         self.declare_parameter('center_deadband', 0.05)
         self.declare_parameter('min_angular_speed', 0.1)
         self.declare_parameter('max_angular_speed', 0.5)
-        self.declare_parameter('yaw_tolerance', 0.01)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
@@ -52,7 +50,6 @@ class ArucoDistanceController(Node):
         self.max_forward_speed = float(self.get_parameter('max_forward_speed').value)
         self.z_tolerance = float(self.get_parameter('z_tolerance').value)
         self.docking_distance = float(self.get_parameter('docking_distance').value)
-        self.final_forward_speed = float(self.get_parameter('final_forward_speed').value)
         self.target_x = float(self.get_parameter('target_x').value)
         self.kp_x = float(self.get_parameter('kp_x').value)
         self.min_lateral_speed = float(self.get_parameter('min_lateral_speed').value)
@@ -63,7 +60,6 @@ class ArucoDistanceController(Node):
         self.center_deadband = float(self.get_parameter('center_deadband').value)
         self.min_angular_speed = float(self.get_parameter('min_angular_speed').value)
         self.max_angular_speed = float(self.get_parameter('max_angular_speed').value)
-        self.yaw_tolerance = float(self.get_parameter('yaw_tolerance').value)
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
 
@@ -94,11 +90,11 @@ class ArucoDistanceController(Node):
         self.get_logger().info('publishing forward/backward, lateral, and yaw commands on /rov_cmd_vel')
         self.get_logger().info(
             'target_z=%.3f kp_z=%.3f min_forward_speed=%.3f max_forward_speed=%.3f '
-            'z_tolerance=%.3f docking_distance=%.3f final_forward_speed=%.3f '
+            'z_tolerance=%.3f docking_distance=%.3f '
             'target_x=%.3f kp_x=%.3f min_lateral_speed=%.3f '
             'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f '
             'kp_center=%.3f center_deadband=%.3f max_angular_speed=%.3f '
-            'yaw_tolerance=%.3f detection_timeout=%.3f control_rate=%.1f'
+            'detection_timeout=%.3f control_rate=%.1f'
             % (
                 self.target_z,
                 self.kp_z,
@@ -106,7 +102,6 @@ class ArucoDistanceController(Node):
                 self.max_forward_speed,
                 self.z_tolerance,
                 self.docking_distance,
-                self.final_forward_speed,
                 self.target_x,
                 self.kp_x,
                 self.min_lateral_speed,
@@ -116,7 +111,6 @@ class ArucoDistanceController(Node):
                 self.kp_center,
                 self.center_deadband,
                 self.max_angular_speed,
-                self.yaw_tolerance,
                 self.detection_timeout,
                 self.control_rate,
             )
@@ -135,10 +129,6 @@ class ArucoDistanceController(Node):
             raise ValueError('docking_distance must be greater than or equal to 0')
         if self.docking_distance > self.target_z:
             raise ValueError('docking_distance must be less than or equal to target_z')
-        if self.final_forward_speed < 0.0:
-            raise ValueError('final_forward_speed must be greater than or equal to 0')
-        if self.final_forward_speed > self.max_forward_speed:
-            raise ValueError('final_forward_speed must be less than or equal to max_forward_speed')
         if self.min_lateral_speed < 0.0:
             raise ValueError('min_lateral_speed must be greater than or equal to 0')
         if self.max_lateral_speed < 0.0:
@@ -157,8 +147,6 @@ class ArucoDistanceController(Node):
             raise ValueError('max_angular_speed must be greater than or equal to 0')
         if self.min_angular_speed > self.max_angular_speed:
             raise ValueError('min_angular_speed must be less than or equal to max_angular_speed')
-        if self.yaw_tolerance < 0.0:
-            raise ValueError('yaw_tolerance must be greater than or equal to 0')
         if self.detection_timeout <= 0.0:
             raise ValueError('detection_timeout must be greater than 0')
         if self.control_rate <= 0.0:
@@ -226,19 +214,35 @@ class ArucoDistanceController(Node):
 
     def _calculate_final_docking_command(self) -> Twist:
         cmd = Twist()
-        if self.latest_z <= self.docking_distance:
-            return cmd
-
-        cmd.linear.x = self.final_forward_speed
-        estimated_x, _ = self._estimate_wall_relative_position(
+        estimated_x, estimated_z = self._estimate_wall_relative_position(
             self.latest_z,
             self.latest_yaw,
         )
+        if estimated_z <= self.docking_distance:
+            return cmd
+
+        cmd.linear.x = self._calculate_final_forward_velocity(estimated_z)
         cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
         return cmd
+
+    def _calculate_final_forward_velocity(self, estimated_z: float) -> float:
+        error_z = estimated_z - self.docking_distance
+        if error_z <= 0.0:
+            return 0.0
+
+        velocity = self.kp_z * error_z
+        velocity = _clamp(
+            velocity,
+            0.0,
+            self.max_forward_speed,
+        )
+        if 0.0 < velocity < self.min_forward_speed:
+            velocity = self.min_forward_speed
+
+        return velocity
 
     def _is_ready_for_final_docking(self) -> bool:
         estimated_x, estimated_z = self._estimate_wall_relative_position(

@@ -159,15 +159,15 @@ else:
 
 The purpose of `FINAL_DOCKING` is to move from the pre-docking pose `P1` to the final docking pose `P2`.
 
-This state keeps the fixed forward approach speed, while continuing proportional lateral correction and marker image-centering angular correction.
+This state continues proportional forward, lateral, and marker image-centering angular correction until the final stop distance is reached.
 
 ```text
-if aruco_z <= docking_distance:
+if estimated_z <= docking_distance:
     cmd.linear.x = 0.0
     cmd.linear.y = 0.0
     cmd.angular.z = 0.0
 else:
-    cmd.linear.x = final_forward_speed
+    cmd.linear.x = kp_z * (estimated_z - docking_distance)
     cmd.linear.y = -kp_x * lateral_error
     if angular_enabled:
         cmd.angular.z = kp_center * angular_error
@@ -196,10 +196,10 @@ In the implementation, `marker_visible == true` means `/aruco/distance` has been
 
 ### FINAL_DOCKING Stop Condition
 
-Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until the marker reaches the final stop distance:
+Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until `estimated_z` reaches the final stop distance:
 
 ```text
-if aruco_z <= docking_distance:
+if estimated_z <= docking_distance:
     cmd.linear.x = 0.0
     cmd.linear.y = 0.0
     cmd.angular.z = 0.0
@@ -222,10 +222,10 @@ PRE_DOCKING:
   abs(normalized_center_error) < center_deadband → angular.z stops
 
 FINAL_DOCKING:
-  aruco_z > docking_distance  → robot moves forward at final_forward_speed
+  estimated_z > docking_distance  → robot moves forward with proportional control
   estimated_x is corrected with proportional lateral control
   normalized_center_error is corrected with proportional angular control
-  aruco_z <= docking_distance → robot stops
+  estimated_z <= docking_distance → robot stops
 ```
 
 ---
@@ -295,10 +295,9 @@ min_forward_speed: 0.25    # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
-final_forward_speed: 0.4   # fixed forward speed in FINAL_DOCKING [m/s]
 target_x: 0.0              # target lateral offset [m]
-kp_x: 1.0                  # lateral proportional gain
-min_lateral_speed: 0.1     # minimum lateral speed outside tolerance [m/s]
+kp_x: 0.4                  # lateral proportional gain
+min_lateral_speed: 0.25    # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
 x_tolerance: 0.01          # acceptable lateral error [m]
 target_yaw: 0.0            # target marker yaw [rad], used for logging/evaluation
@@ -306,7 +305,6 @@ kp_center: 0.3             # marker image-centering proportional gain
 center_deadband: 0.05      # normalized center-error deadband
 min_angular_speed: 0.1     # retained for compatibility; marker-centering control does not use direct minimum speed
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
-yaw_tolerance: 0.01        # acceptable yaw error [rad], used for logging/evaluation
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -374,7 +372,7 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 * Lateral alignment control
 * Marker image-centering angular control
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
-* Final docking using fixed `linear.x` with proportional `linear.y` and `angular.z` correction
+* Final docking using proportional `linear.x`, `linear.y`, and `angular.z` correction
 * Safety stop (tolerance & timeout)
 
 ---
@@ -395,4 +393,4 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 * Validate marker image-centering direction
 * Check whether logged `aruco_yaw` naturally approaches the target posture
 * Tune `center_deadband`
-* Tune `docking_distance` and `final_forward_speed`
+* Tune `docking_distance`
