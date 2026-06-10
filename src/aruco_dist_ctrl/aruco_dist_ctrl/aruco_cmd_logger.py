@@ -62,27 +62,17 @@ class ArucoCmdLogger(Node):
         self.latest_optitrack_pose: Optional[PoseStamped] = None
         self.latest_cmd: Optional[Twist] = None
 
-        logger_qos = QoSProfile(depth=10)
-        logger_qos.reliability = ReliabilityPolicy.BEST_EFFORT
+        optitrack_best_effort_qos = QoSProfile(depth=10)
+        optitrack_best_effort_qos.reliability = ReliabilityPolicy.BEST_EFFORT
 
-        self.create_subscription(
-            ArucoDistance,
-            '/aruco/distance',
-            self.aruco_callback,
-            logger_qos,
-        )
+        self.create_subscription(ArucoDistance, '/aruco/distance', self.aruco_callback, 10)
         self.create_subscription(
             PoseStamped,
             self.optitrack_pose_topic,
             self.optitrack_pose_callback,
-            logger_qos,
+            optitrack_best_effort_qos,
         )
-        self.create_subscription(
-            Twist,
-            '/rov_cmd_vel',
-            self.cmd_callback,
-            logger_qos,
-        )
+        self.create_subscription(Twist, '/rov_cmd_vel', self.cmd_callback, 10)
         self.create_timer(1.0 / self.log_rate, self.log_callback)
 
         self.get_logger().info(
