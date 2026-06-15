@@ -47,7 +47,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_forward_speed',
-            default_value='0.25',
+            default_value='0.3',
             description='Minimum forward/backward command outside z_tolerance',
         ),
         DeclareLaunchArgument(
@@ -77,7 +77,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_lateral_speed',
-            default_value='0.25',
+            default_value='0.3',
             description='Minimum lateral command outside x_tolerance',
         ),
         DeclareLaunchArgument(
