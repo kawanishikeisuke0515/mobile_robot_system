@@ -1,7 +1,7 @@
 import os
 import math
 from collections import deque
-from collections.abc import Deque
+from typing import Deque
 from typing import Optional
 
 import rclpy

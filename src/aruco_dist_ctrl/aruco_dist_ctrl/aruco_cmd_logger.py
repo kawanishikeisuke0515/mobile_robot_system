@@ -3,8 +3,8 @@ import math
 import os
 import time
 from collections import deque
-from collections.abc import Deque
 from datetime import datetime
+from typing import Deque
 from typing import Optional
 
 import rclpy
