@@ -1,4 +1,4 @@
-# ArUco Distance Controller (v0.3 Switching Docking Control)
+# ArUco Distance Controller (v0.4 Moving-Average Docking Control)
 
 ## Overview
 
@@ -7,6 +7,8 @@ This node controls the robot's forward/backward, lateral, and yaw motion based o
 The robot is equipped with omni wheels, so position control and posture control can be handled independently through `linear.x`, `linear.y`, and `angular.z`.
 
 The objective is to autonomously dock to a docking station by first moving from the initial pose `P0` to a pre-docking pose `P1`, and then moving from `P1` to the final docking pose `P2`.
+
+This version applies a configurable moving average to the wall-relative translational estimates `estimated_x` and `estimated_z`. The default window size is `1`, which preserves the previous behavior.
 
 ---
 
@@ -98,14 +100,17 @@ PRE_DOCKING
 FINAL_DOCKING
 ```
 
-### Error Definition
+### Position Estimation And Error Definition
 
 ```text
 theta = wrap_pi(aruco_yaw - target_yaw)
 d = aruco_z
 
-estimated_x = d * sin(theta)
-estimated_z = d * cos(theta)
+raw_estimated_x = d * sin(theta)
+raw_estimated_z = d * cos(theta)
+
+estimated_x = moving_average(raw_estimated_x)
+estimated_z = moving_average(raw_estimated_z)
 
 forward_error = estimated_z - target_z
 lateral_error = estimated_x - target_x
@@ -115,6 +120,33 @@ center_error = normalized_center_error
 `aruco_theta` is positive when the marker center is to the camera-right side. In this version, `aruco_theta` is published by the distance publisher but not used by the controller.
 
 `theta` in the controller is the marker yaw error, which represents the tilt between the robot and the docking wall. The controller uses `aruco_z` as `d`, assuming that marker-centering angular control keeps the camera approximately facing the marker center.
+
+### Moving Average
+
+The controller smooths only the wall-relative translational estimates:
+
+```text
+estimated_x = average(last N raw_estimated_x samples)
+estimated_z = average(last N raw_estimated_z samples)
+N = position_average_window_size
+```
+
+`raw_estimated_x` and `raw_estimated_z` are stored in independent fixed-length buffers. If fewer than `N` samples are available, the controller averages the samples currently held in the buffer.
+
+The moving average is applied before:
+
+- PRE_DOCKING forward/backward control
+- PRE_DOCKING lateral control
+- PRE_DOCKING to FINAL_DOCKING transition judgment
+- FINAL_DOCKING forward control
+- FINAL_DOCKING lateral control
+- FINAL_DOCKING stop judgment
+
+The image-centering yaw control uses the latest `normalized_center_error` directly. It is not smoothed by this moving average.
+
+If ArUco detection times out, the controller publishes zero velocity and clears the `estimated_x` / `estimated_z` moving-average buffers. When detection resumes, the average restarts from new samples only.
+
+With `position_average_window_size: 1`, the average contains only the latest sample, so the behavior is equivalent to the previous unsmoothed position estimate.
 
 ### Angular Control
 
@@ -143,7 +175,7 @@ abs(normalized_center_error) >= 0.05:
 
 The purpose of `PRE_DOCKING` is to move from the initial pose `P0` to the pre-docking pose `P1` while preparing both position and posture for docking.
 
-The controller does not directly command wall-perpendicular yaw in `PRE_DOCKING`. Instead, it keeps the marker centered in the camera image and uses the wall-yaw estimate to compute `estimated_x` and `estimated_z` for translational control.
+The controller does not directly command wall-perpendicular yaw in `PRE_DOCKING`. Instead, it keeps the marker centered in the camera image and uses the moving-averaged wall-relative `estimated_x` and `estimated_z` for translational control.
 
 ```text
 cmd.linear.x = kp_z * forward_error
@@ -194,6 +226,8 @@ abs(normalized_center_error) < center_deadband
 
 In the implementation, `marker_visible == true` means `/aruco/distance` has been received within `detection_timeout`.
 
+`estimated_x` and `estimated_z` in this transition condition are the moving-averaged values.
+
 ### FINAL_DOCKING Stop Condition
 
 Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until `estimated_z` reaches the final stop distance:
@@ -206,6 +240,8 @@ if estimated_z <= docking_distance:
 ```
 
 If ArUco detection times out during `FINAL_DOCKING`, the controller publishes zero velocity and returns to `PRE_DOCKING`.
+
+The `estimated_z` used for the final stop condition is the moving-averaged value.
 
 ---
 
@@ -257,6 +293,8 @@ cmd.angular.z = 0.0
 
 If detection is lost during `FINAL_DOCKING`, the controller returns to `PRE_DOCKING`.
 
+The moving-average buffers for `estimated_x` and `estimated_z` are cleared when detection times out, so stale position estimates are not reused after detection resumes.
+
 ### 3. Velocity Limitation
 
 ```text
@@ -291,23 +329,29 @@ if 0.0 < abs(cmd.linear.y) < min_lateral_speed:
 ```yaml
 target_z: 1.3              # pre-docking target distance [m]
 kp_z: 2.0                  # forward/backward proportional gain
-min_forward_speed: 0.3     # minimum moving speed outside tolerance [m/s]
+min_forward_speed: 0.30    # minimum moving speed outside tolerance [m/s]
 max_forward_speed: 0.95    # maximum forward/backward speed [m/s]
 z_tolerance: 0.01          # acceptable pre-docking distance error [m]
 docking_distance: 1.0      # final stop distance [m]
 target_x: 0.0              # target lateral offset [m]
 kp_x: 0.4                  # lateral proportional gain
-min_lateral_speed: 0.3     # minimum lateral speed outside tolerance [m/s]
+min_lateral_speed: 0.30    # minimum lateral speed outside tolerance [m/s]
 max_lateral_speed: 0.95    # maximum lateral speed [m/s]
 x_tolerance: 0.01          # acceptable lateral error [m]
 target_yaw: 0.0            # target marker yaw [rad], used for logging/evaluation
 kp_center: 0.3             # marker image-centering proportional gain
 center_deadband: 0.05      # normalized center-error deadband
-min_angular_speed: 0.1     # retained for compatibility; marker-centering control does not use direct minimum speed
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
+position_average_window_size: 1  # moving-average window for estimated_x/z samples
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
+
+`position_average_window_size` must be greater than or equal to `1`.
+
+At the default `control_rate` of 20 Hz, one sample corresponds to about 0.05 seconds. A window size of 5 covers about 0.25 seconds of samples, with an approximate effective delay of `(5 - 1) / 2 / 20 = 0.10` seconds for a simple moving average.
+
+`aruco_docking.launch.py` should expose `position_average_window_size` as a launch argument and pass it to `aruco_distance_controller`.
 
 ---
 
@@ -348,7 +392,10 @@ Run this logger during experiments to save `/aruco/distance`, the OptiTrack pose
 ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
   -p output_dir:=/tmp/aruco_docking_logs \
   -p log_rate:=20.0 \
-  -p optitrack_pose_topic:=/vrpn_mocap/RigidBody_1/pose
+  -p optitrack_pose_topic:=/vrpn_mocap/RigidBody_1/pose \
+  -p target_yaw:=0.0 \
+  -p position_average_window_size:=1 \
+  -p detection_timeout:=0.5
 ```
 
 The logger writes:
@@ -362,17 +409,30 @@ Main columns:
 ```text
 elapsed_sec, aruco_z, aruco_yaw, aruco_normalized_center_error,
 aruco_z_cos_yaw, aruco_z_sin_yaw,
+raw_estimated_z, raw_estimated_x,
+estimated_z_average, estimated_x_average,
 optitrack_x, optitrack_y, optitrack_z,
 cmd_linear_x, cmd_linear_y, cmd_angular_z
 ```
 
+`raw_estimated_z` and `raw_estimated_x` use the same wall-relative transform as the controller:
+
+```text
+theta = wrap_pi(aruco_yaw - target_yaw)
+raw_estimated_x = aruco_z * sin(theta)
+raw_estimated_z = aruco_z * cos(theta)
+```
+
+`estimated_z_average` and `estimated_x_average` are the logger-side moving averages of those raw estimates. To match the controller behavior, run the logger with the same `target_yaw`, `position_average_window_size`, and `detection_timeout` values as `aruco_distance_controller`.
+
 ---
 
-## Scope (v0.3)
+## Scope (v0.4)
 
 * Distance-based forward/backward control
 * Lateral alignment control
 * Marker image-centering angular control
+* Moving average for wall-relative `estimated_x` and `estimated_z`
 * Two-state docking sequence (`PRE_DOCKING` / `FINAL_DOCKING`)
 * Final docking using proportional `linear.x`, `linear.y`, and `angular.z` correction
 * Safety stop (tolerance & timeout)
@@ -396,3 +456,4 @@ cmd_linear_x, cmd_linear_y, cmd_angular_z
 * Check whether logged `aruco_yaw` naturally approaches the target posture
 * Tune `center_deadband`
 * Tune `docking_distance`
+* Tune `position_average_window_size`

@@ -1,5 +1,7 @@
 import os
 import math
+from collections import deque
+from collections.abc import Deque
 from typing import Optional
 
 import rclpy
@@ -21,26 +23,30 @@ def _wrap_pi(angle: float) -> float:
     return math.atan2(math.sin(angle), math.cos(angle))
 
 
+def _mean(values: Deque[float]) -> float:
+    return sum(values) / len(values)
+
+
 class ArucoDistanceController(Node):
     def __init__(self):
         super().__init__('aruco_distance_controller')
 
         self.declare_parameter('target_z', 1.3)
         self.declare_parameter('kp_z', 2.0)
-        self.declare_parameter('min_forward_speed', 0.3)
+        self.declare_parameter('min_forward_speed', 0.30)
         self.declare_parameter('max_forward_speed', 0.95)
         self.declare_parameter('z_tolerance', 0.01)
         self.declare_parameter('docking_distance', 1.0)
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('kp_x', 0.4)
-        self.declare_parameter('min_lateral_speed', 0.3)
+        self.declare_parameter('min_lateral_speed', 0.30)
         self.declare_parameter('max_lateral_speed', 0.95)
         self.declare_parameter('x_tolerance', 0.01)
         self.declare_parameter('target_yaw', 0.0)
         self.declare_parameter('kp_center', 0.3)
         self.declare_parameter('center_deadband', 0.05)
-        self.declare_parameter('min_angular_speed', 0.1)
         self.declare_parameter('max_angular_speed', 0.5)
+        self.declare_parameter('position_average_window_size', 1)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
@@ -58,8 +64,10 @@ class ArucoDistanceController(Node):
         self.target_yaw = float(self.get_parameter('target_yaw').value)
         self.kp_center = float(self.get_parameter('kp_center').value)
         self.center_deadband = float(self.get_parameter('center_deadband').value)
-        self.min_angular_speed = float(self.get_parameter('min_angular_speed').value)
         self.max_angular_speed = float(self.get_parameter('max_angular_speed').value)
+        self.position_average_window_size = int(
+            self.get_parameter('position_average_window_size').value
+        )
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
 
@@ -67,8 +75,16 @@ class ArucoDistanceController(Node):
 
         self.latest_z: Optional[float] = None
         self.latest_yaw: Optional[float] = None
+        self.latest_estimated_x: Optional[float] = None
+        self.latest_estimated_z: Optional[float] = None
         self.latest_normalized_center_error: Optional[float] = None
         self.last_detection_time: Optional[Time] = None
+        self.estimated_x_buffer: Deque[float] = deque(
+            maxlen=self.position_average_window_size
+        )
+        self.estimated_z_buffer: Deque[float] = deque(
+            maxlen=self.position_average_window_size
+        )
         self.was_timed_out = True
         self.state = PRE_DOCKING
 
@@ -92,6 +108,7 @@ class ArucoDistanceController(Node):
             'target_x=%.3f kp_x=%.3f min_lateral_speed=%.3f '
             'max_lateral_speed=%.3f x_tolerance=%.3f target_yaw=%.3f '
             'kp_center=%.3f center_deadband=%.3f max_angular_speed=%.3f '
+            'position_average_window_size=%d '
             'detection_timeout=%.3f control_rate=%.1f'
             % (
                 self.target_z,
@@ -109,6 +126,7 @@ class ArucoDistanceController(Node):
                 self.kp_center,
                 self.center_deadband,
                 self.max_angular_speed,
+                self.position_average_window_size,
                 self.detection_timeout,
                 self.control_rate,
             )
@@ -139,22 +157,34 @@ class ArucoDistanceController(Node):
             raise ValueError('kp_center must be greater than or equal to 0')
         if self.center_deadband < 0.0:
             raise ValueError('center_deadband must be greater than or equal to 0')
-        if self.min_angular_speed < 0.0:
-            raise ValueError('min_angular_speed must be greater than or equal to 0')
         if self.max_angular_speed < 0.0:
             raise ValueError('max_angular_speed must be greater than or equal to 0')
-        if self.min_angular_speed > self.max_angular_speed:
-            raise ValueError('min_angular_speed must be less than or equal to max_angular_speed')
+        if self.position_average_window_size < 1:
+            raise ValueError('position_average_window_size must be greater than or equal to 1')
         if self.detection_timeout <= 0.0:
             raise ValueError('detection_timeout must be greater than 0')
         if self.control_rate <= 0.0:
             raise ValueError('control_rate must be greater than 0')
 
     def distance_callback(self, msg: ArucoDistance):
+        now = self.get_clock().now()
+        if self.last_detection_time is not None:
+            elapsed = now - self.last_detection_time
+            if elapsed.nanoseconds * 1e-9 > self.detection_timeout:
+                self._clear_position_average()
+
         self.latest_z = float(msg.z)
         self.latest_yaw = float(msg.yaw)
         self.latest_normalized_center_error = float(msg.normalized_center_error)
-        self.last_detection_time = self.get_clock().now()
+        raw_estimated_x, raw_estimated_z = self._estimate_wall_relative_position(
+            self.latest_z,
+            self.latest_yaw,
+        )
+        self.estimated_x_buffer.append(raw_estimated_x)
+        self.estimated_z_buffer.append(raw_estimated_z)
+        self.latest_estimated_x = _mean(self.estimated_x_buffer)
+        self.latest_estimated_z = _mean(self.estimated_z_buffer)
+        self.last_detection_time = now
 
     def control_callback(self):
         cmd = Twist()
@@ -173,6 +203,7 @@ class ArucoDistanceController(Node):
             if self.state != PRE_DOCKING:
                 self.state = PRE_DOCKING
                 self.get_logger().warn('ArUco detection lost; returning to PRE_DOCKING')
+            self._clear_position_average()
             cmd.linear.x = 0.0
             cmd.linear.y = 0.0
             cmd.angular.z = 0.0
@@ -186,6 +217,8 @@ class ArucoDistanceController(Node):
         if (
             self.latest_z is None
             or self.latest_yaw is None
+            or self.latest_estimated_x is None
+            or self.latest_estimated_z is None
             or self.latest_normalized_center_error is None
             or self.last_detection_time is None
         ):
@@ -196,12 +229,8 @@ class ArucoDistanceController(Node):
 
     def _calculate_pre_docking_command(self) -> Twist:
         cmd = Twist()
-        estimated_x, estimated_z = self._estimate_wall_relative_position(
-            self.latest_z,
-            self.latest_yaw,
-        )
-        cmd.linear.x = self._calculate_forward_velocity(estimated_z)
-        cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
+        cmd.linear.x = self._calculate_forward_velocity(self.latest_estimated_z)
+        cmd.linear.y = self._calculate_lateral_velocity(self.latest_estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
@@ -209,15 +238,11 @@ class ArucoDistanceController(Node):
 
     def _calculate_final_docking_command(self) -> Twist:
         cmd = Twist()
-        estimated_x, estimated_z = self._estimate_wall_relative_position(
-            self.latest_z,
-            self.latest_yaw,
-        )
-        if estimated_z <= self.docking_distance:
+        if self.latest_estimated_z <= self.docking_distance:
             return cmd
 
-        cmd.linear.x = self._calculate_final_forward_velocity(estimated_z)
-        cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
+        cmd.linear.x = self._calculate_final_forward_velocity(self.latest_estimated_z)
+        cmd.linear.y = self._calculate_lateral_velocity(self.latest_estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
         )
@@ -240,12 +265,8 @@ class ArucoDistanceController(Node):
         return velocity
 
     def _is_ready_for_final_docking(self) -> bool:
-        estimated_x, estimated_z = self._estimate_wall_relative_position(
-            self.latest_z,
-            self.latest_yaw,
-        )
-        forward_error = estimated_z - self.target_z
-        lateral_error = estimated_x - self.target_x
+        forward_error = self.latest_estimated_z - self.target_z
+        lateral_error = self.latest_estimated_x - self.target_x
         return (
             abs(forward_error) < self.z_tolerance
             and abs(lateral_error) < self.x_tolerance
@@ -261,6 +282,12 @@ class ArucoDistanceController(Node):
         estimated_x = aruco_z * math.sin(theta)
         estimated_z = aruco_z * math.cos(theta)
         return estimated_x, estimated_z
+
+    def _clear_position_average(self):
+        self.estimated_x_buffer.clear()
+        self.estimated_z_buffer.clear()
+        self.latest_estimated_x = None
+        self.latest_estimated_z = None
 
     def _calculate_forward_velocity(self, aruco_z: float) -> float:
         error_z = aruco_z - self.target_z
