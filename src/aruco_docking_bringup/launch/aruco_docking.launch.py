@@ -112,7 +112,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'position_average_window_size',
-            default_value='1',
+            default_value='5',
             description='Moving-average window size for wall-relative estimated_x and estimated_z',
         ),
         Node(

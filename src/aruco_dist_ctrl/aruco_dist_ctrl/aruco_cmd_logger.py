@@ -34,7 +34,7 @@ class ArucoCmdLogger(Node):
         self.declare_parameter('flush_every_rows', 20)
         self.declare_parameter('optitrack_pose_topic', '/vrpn_mocap/RigidBody_1/pose')
         self.declare_parameter('target_yaw', 0.0)
-        self.declare_parameter('position_average_window_size', 1)
+        self.declare_parameter('position_average_window_size', 5)
         self.declare_parameter('detection_timeout', 0.5)
 
         self.output_dir = str(self.get_parameter('output_dir').value)

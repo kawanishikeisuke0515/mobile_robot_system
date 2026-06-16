@@ -84,7 +84,7 @@ Status: draft
 | `kp_center` | `float` | `0.3` | `>= 0.0` | 画像中心合わせ用yaw Pゲイン |
 | `center_deadband` | `float` | `0.05` | `>= 0.0` | 画像中心合わせ用deadband |
 | `max_angular_speed` | `float` | `0.5` | `>= 0.0` | yaw角速度の最大値 |
-| `position_average_window_size` | `int` | `1` | `>= 1` | `estimated_x` と `estimated_z` の移動平均window数 |
+| `position_average_window_size` | `int` | `5` | `>= 1` | `estimated_x` と `estimated_z` の移動平均window数 |
 | `detection_timeout` | `float` | `0.5` | `> 0.0` | ArUco検出timeout |
 | `control_rate` | `float` | `20.0` | `> 0.0` | 制御周期 |
 
@@ -136,7 +136,7 @@ center_error = normalized_center_error
 | MA-001 | `/aruco/distance` 受信時に `raw_estimated_x` と `raw_estimated_z` を計算すること。 |
 | MA-002 | `raw_estimated_x` と `raw_estimated_z` は、それぞれ独立した固定長bufferで保持すること。 |
 | MA-003 | buffer長は `position_average_window_size` により指定すること。 |
-| MA-004 | `position_average_window_size == 1` の場合、移動平均なしの既存挙動と同等になること。 |
+| MA-004 | `position_average_window_size == 1` に明示設定した場合、移動平均なしの既存挙動と同等になること。 |
 | MA-005 | buffer内のsample数が `position_average_window_size` 未満の場合、保持しているsampleのみで平均すること。 |
 | MA-006 | `estimated_x` と `estimated_z` を使う前後・横方向制御、状態遷移判定、FINAL_DOCKING停止判定は、移動平均後の値を使用すること。 |
 | MA-007 | `normalized_center_error` に基づくyaw制御は、移動平均後の `estimated_x/z` ではなく、受信した最新の `normalized_center_error` を使用すること。 |
@@ -247,7 +247,7 @@ estimated_z <= docking_distance
 
 | ID | Test | Pass Condition |
 | --- | --- | --- |
-| VT-001 | `position_average_window_size:=1` で制御する | 既存挙動と同等に動作する |
+| VT-001 | `position_average_window_size:=1` で制御する | 移動平均なしの既存挙動と同等に動作する |
 | VT-002 | `position_average_window_size` を増やしてターゲット付近の `/rov_cmd_vel` を記録する | `cmd_linear_x` と `cmd_linear_y` の短周期チャタリングが減る |
 | VT-003 | markerを一時的に隠してから再検出させる | timeout前の古い位置推定値が復帰後の平均に混ざらない |
 | VT-004 | FINAL_DOCKING停止直前の挙動を確認する | 移動平均による遅れで `docking_distance` を大きく越えて突っ込みすぎない |
@@ -261,7 +261,7 @@ AIが設計仕様書を作成する場合、以下を守ること。
 2. `aruco_distance_controller` の責務は速度指令生成までとする。
 3. motor commandの不感帯補償は本nodeで直接扱わない。
 4. 追加parameterが必要な場合は、既存挙動と互換になるdefault値を定義する。
-5. `position_average_window_size` のdefaultは、既存挙動と互換になる `1` とする。
+5. `position_average_window_size` のdefaultは、実機チューニング初期値として `5` とする。
 6. 移動平均の対象は `estimated_x` と `estimated_z` に限定し、yaw制御用の `normalized_center_error` は対象外とする。
 7. 実装案が複数ある場合は、parameter調整のみで対応する案、移動平均を追加する案、内部速度整形を追加する案を分けて提示する。
 

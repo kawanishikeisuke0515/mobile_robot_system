@@ -46,7 +46,7 @@ class ArucoDistanceController(Node):
         self.declare_parameter('kp_center', 0.3)
         self.declare_parameter('center_deadband', 0.05)
         self.declare_parameter('max_angular_speed', 0.5)
-        self.declare_parameter('position_average_window_size', 1)
+        self.declare_parameter('position_average_window_size', 5)
         self.declare_parameter('detection_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 

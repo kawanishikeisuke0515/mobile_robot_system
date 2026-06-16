@@ -8,7 +8,7 @@ The robot is equipped with omni wheels, so position control and posture control 
 
 The objective is to autonomously dock to a docking station by first moving from the initial pose `P0` to a pre-docking pose `P1`, and then moving from `P1` to the final docking pose `P2`.
 
-This version applies a configurable moving average to the wall-relative translational estimates `estimated_x` and `estimated_z`. The default window size is `1`, which preserves the previous behavior.
+This version applies a configurable moving average to the wall-relative translational estimates `estimated_x` and `estimated_z`. The default window size is `5`.
 
 ---
 
@@ -342,7 +342,7 @@ target_yaw: 0.0            # target marker yaw [rad], used for logging/evaluatio
 kp_center: 0.3             # marker image-centering proportional gain
 center_deadband: 0.05      # normalized center-error deadband
 max_angular_speed: 0.5     # maximum yaw speed [rad/s]
-position_average_window_size: 1  # moving-average window for estimated_x/z samples
+position_average_window_size: 5  # moving-average window for estimated_x/z samples
 detection_timeout: 0.5     # timeout [sec]
 control_rate: 20.0         # control loop frequency [Hz]
 ```
@@ -394,7 +394,7 @@ ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
   -p log_rate:=20.0 \
   -p optitrack_pose_topic:=/vrpn_mocap/RigidBody_1/pose \
   -p target_yaw:=0.0 \
-  -p position_average_window_size:=1 \
+  -p position_average_window_size:=5 \
   -p detection_timeout:=0.5
 ```
 
