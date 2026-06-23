@@ -213,10 +213,12 @@ class ArucoDistanceController(Node):
             self.latest_z,
             self.latest_yaw,
         )
-        if estimated_z <= self.docking_distance:
+
+        if self._is_final_docking_complete(estimated_x, estimated_z):
             return cmd
 
-        cmd.linear.x = self._calculate_final_forward_velocity(estimated_z)
+        if estimated_z > self.docking_distance:
+            cmd.linear.x = self._calculate_final_forward_velocity(estimated_z)
         cmd.linear.y = self._calculate_lateral_velocity(estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
@@ -248,6 +250,14 @@ class ArucoDistanceController(Node):
         lateral_error = estimated_x - self.target_x
         return (
             abs(forward_error) < self.z_tolerance
+            and abs(lateral_error) < self.x_tolerance
+            and abs(self.latest_normalized_center_error) < self.center_deadband
+        )
+
+    def _is_final_docking_complete(self, estimated_x: float, estimated_z: float) -> bool:
+        lateral_error = estimated_x - self.target_x
+        return (
+            estimated_z <= self.docking_distance
             and abs(lateral_error) < self.x_tolerance
             and abs(self.latest_normalized_center_error) < self.center_deadband
         )

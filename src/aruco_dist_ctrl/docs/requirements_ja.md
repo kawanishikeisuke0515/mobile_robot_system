@@ -153,15 +153,19 @@ abs(normalized_center_error) < center_deadband
 
 ```text
 estimated_z <= docking_distance
+abs(estimated_x - target_x) < x_tolerance
+abs(normalized_center_error) < center_deadband
 ```
 
 要求:
 
 | ID | Requirement |
-| CF-020 | `estimated_z <= docking_distance` の場合、`linear.x = 0.0`, `linear.y = 0.0`, `angular.z = 0.0` とすること。 |
+| CF-020 | `estimated_z <= docking_distance`、`abs(estimated_x - target_x) < x_tolerance`、`abs(normalized_center_error) < center_deadband` をすべて満たす場合、`linear.x = 0.0`, `linear.y = 0.0`, `angular.z = 0.0` とすること。 |
 | CF-021 | `estimated_z > docking_distance` の場合、`estimated_z - docking_distance` に基づき前進速度を計算すること。 |
 | CF-022 | FINAL_DOCKING中の前進速度も `kp_z`、`min_forward_speed`、`max_forward_speed` の影響を受けること。 |
 | CF-023 | 最終停止距離直前で過大な最小速度指令により突っ込みすぎないように、parameter調整または内部速度整形で抑制できること。 |
+| CF-024 | `estimated_z <= docking_distance` かつ横方向または画像中心が許容範囲外の場合、`linear.x = 0.0` とし、横方向制御および画像中心合わせ制御を継続すること。 |
+| CF-025 | FINAL_DOCKING停止条件の `estimated_x` と `estimated_z` は、ArUco yawを用いた壁相対推定後の値を使用すること。 |
 
 ## 8. Failure Cases
 
