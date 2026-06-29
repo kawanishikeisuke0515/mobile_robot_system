@@ -21,8 +21,8 @@ def generate_launch_description():
     target_yaw = LaunchConfiguration('target_yaw')
     kp_center = LaunchConfiguration('kp_center')
     center_deadband = LaunchConfiguration('center_deadband')
-    min_angular_speed = LaunchConfiguration('min_angular_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
+    position_average_window_size = LaunchConfiguration('position_average_window_size')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -47,7 +47,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_forward_speed',
-            default_value='0.3',
+            default_value='0.30',
             description='Minimum forward/backward command outside z_tolerance',
         ),
         DeclareLaunchArgument(
@@ -77,7 +77,7 @@ def generate_launch_description():
         ),
         DeclareLaunchArgument(
             'min_lateral_speed',
-            default_value='0.3',
+            default_value='0.30',
             description='Minimum lateral command outside x_tolerance',
         ),
         DeclareLaunchArgument(
@@ -106,14 +106,14 @@ def generate_launch_description():
             description='Normalized image-center error deadband for angular control',
         ),
         DeclareLaunchArgument(
-            'min_angular_speed',
-            default_value='0.1',
-            description='Retained for compatibility; marker-centering control does not apply direct minimum speed',
-        ),
-        DeclareLaunchArgument(
             'max_angular_speed',
             default_value='0.5',
             description='Maximum yaw command',
+        ),
+        DeclareLaunchArgument(
+            'position_average_window_size',
+            default_value='5',
+            description='Moving-average window size for wall-relative estimated_x and estimated_z',
         ),
         Node(
             package='aruco_distance_publisher',
@@ -145,8 +145,8 @@ def generate_launch_description():
                 'target_yaw': target_yaw,
                 'kp_center': kp_center,
                 'center_deadband': center_deadband,
-                'min_angular_speed': min_angular_speed,
                 'max_angular_speed': max_angular_speed,
+                'position_average_window_size': position_average_window_size,
             }],
         ),
         Node(

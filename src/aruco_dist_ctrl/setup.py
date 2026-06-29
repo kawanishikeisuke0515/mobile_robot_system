@@ -9,7 +9,11 @@ setup(
     data_files=[
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
-        ('share/' + package_name, ['package.xml', 'README.md']),
+        ('share/' + package_name, ['package.xml']),
+        ('share/' + package_name + '/docs', [
+            'docs/aruco_dist_ctrl_spec.md',
+            'docs/requirements_ja.md',
+        ]),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
