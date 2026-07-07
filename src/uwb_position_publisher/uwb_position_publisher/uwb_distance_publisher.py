@@ -67,14 +67,25 @@ def parse_uwb_csv(line) -> ParsedUwbDistances:
     )
 
 
-def distance_cm_to_m(distance_cm: int) -> Tuple[float, bool]:
-    if distance_cm < 0:
+def distance_cm_to_m(
+    distance_cm: int,
+    invalid_distance_cm: int = 65535,
+) -> Tuple[float, bool]:
+    if distance_cm < 0 or distance_cm == invalid_distance_cm:
         return math.nan, False
     return float(distance_cm) / 100.0, True
 
 
-def build_message(parsed: ParsedUwbDistances, stamp, frame_id: str) -> UwbDistances:
-    distances = [distance_cm_to_m(distance_cm) for distance_cm in parsed.distance_cm]
+def build_message(
+    parsed: ParsedUwbDistances,
+    stamp,
+    frame_id: str,
+    invalid_distance_cm: int = 65535,
+) -> UwbDistances:
+    distances = [
+        distance_cm_to_m(distance_cm, invalid_distance_cm)
+        for distance_cm in parsed.distance_cm
+    ]
 
     msg = UwbDistances()
     msg.header.stamp = stamp
@@ -98,7 +109,7 @@ class UwbDistancePublisher(Node):
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('read_timeout', 0.1)
         self.declare_parameter('reconnect_interval', 1.0)
-        self.declare_parameter('invalid_distance_cm', -1)
+        self.declare_parameter('invalid_distance_cm', 65535)
         self.declare_parameter('frame_id', 'uwb')
         self.declare_parameter('timer_period', 0.01)
 
@@ -207,6 +218,7 @@ class UwbDistancePublisher(Node):
             parsed,
             self.get_clock().now().to_msg(),
             self.frame_id,
+            self.invalid_distance_cm,
         )
         self.publisher_.publish(msg)
 

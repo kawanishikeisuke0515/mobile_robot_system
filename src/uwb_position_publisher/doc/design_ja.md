@@ -92,7 +92,7 @@ executable: uwb_distance_publisher
 | `baudrate` | int | `115200` | シリアル通信速度 |
 | `read_timeout` | double | `0.1` | 1 回の read timeout [s] |
 | `reconnect_interval` | double | `1.0` | 再接続試行間隔 [s] |
-| `invalid_distance_cm` | int | `-1` | 測距失敗を表す距離値 [cm] |
+| `invalid_distance_cm` | int | `65535` | 測距失敗を表す距離値 [cm] |
 | `frame_id` | string | `uwb` | publish する header の frame id |
 
 実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。
@@ -120,7 +120,7 @@ device_time_ms,anchor_1_distance_cm,anchor_2_distance_cm,anchor_3_distance_cm
 括弧付き入力も許容する。
 
 ```text
-(29907,46,156,-1)
+(29907,46,156,65535)
 ```
 
 ### 6.3 正規化
@@ -162,7 +162,7 @@ publish 可能な入力条件:
 距離値はアンカーごとに独立して判定する。
 
 ```text
-valid = distance_cm >= 0
+valid = distance_cm >= 0 and distance_cm != invalid_distance_cm
 ```
 
 有効距離:
@@ -179,7 +179,9 @@ distance_m = NaN
 valid = false
 ```
 
-`invalid_distance_cm` はデフォルト `-1` とするが、初期実装では「0 未満の距離値」を無効として扱う。これにより `-1` 以外の負値が入力された場合も測距失敗として安全に処理できる。
+`invalid_distance_cm` はデフォルト `65535` とする。UWB 側で値が入っていない場合に `65535` が出力されるため、この値は測距失敗として扱う。
+
+0 未満の距離値も無効として扱う。これにより `-1` などの負値が入力された場合も測距失敗として安全に処理できる。
 
 ## 8. 出力設計
 
@@ -395,7 +397,7 @@ uwb_distance_publisher:
     baudrate: 115200
     read_timeout: 0.1
     reconnect_interval: 1.0
-    invalid_distance_cm: -1
+    invalid_distance_cm: 65535
     frame_id: "uwb"
 ```
 
@@ -427,6 +429,7 @@ CSV parse と message 変換はシリアル実機なしでテストできるよ�
 - 括弧付き CSV を parse できる。
 - 前後空白付き CSV を parse できる。
 - cm から m に変換できる。
+- `65535` が `NaN` と `valid=false` になる。
 - `-1` が `NaN` と `valid=false` になる。
 - 3 アンカーすべて無効でも parse 成功になる。
 - 列数不一致を reject する。
@@ -459,7 +462,7 @@ ros2 topic echo /uwb/distances
 期待値:
 
 ```text
-CSV: 29907,46,156,-1
+CSV: 29907,46,156,65535
 
 device_time_ms: 29907
 anchor_1_distance_m: 0.46
@@ -468,7 +471,7 @@ anchor_3_distance_m: NaN
 anchor_1_valid: true
 anchor_2_valid: true
 anchor_3_valid: false
-raw_line: "29907,46,156,-1"
+raw_line: "29907,46,156,65535"
 ```
 
 ## 16. 実装メモ
@@ -478,7 +481,7 @@ raw_line: "29907,46,156,-1"
 ```text
 normalize_line(line: str) -> str
 parse_uwb_csv(line: str) -> ParsedUwbDistances
-distance_cm_to_m(distance_cm: int) -> tuple[float, bool]
+distance_cm_to_m(distance_cm: int, invalid_distance_cm: int) -> tuple[float, bool]
 build_message(parsed: ParsedUwbDistances, stamp, frame_id: str) -> UwbDistances
 try_open_serial() -> bool
 close_serial() -> None

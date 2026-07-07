@@ -52,7 +52,7 @@ device_time_ms,anchor_1_distance_cm,anchor_2_distance_cm,anchor_3_distance_cm
 例:
 
 ```text
-29907,46,156,-1
+29907,46,156,65535
 ```
 
 各列の意味:
@@ -67,7 +67,7 @@ device_time_ms,anchor_1_distance_cm,anchor_2_distance_cm,anchor_3_distance_cm
 入力行は括弧付きでも受け付ける。
 
 ```text
-(29907,46,156,-1)
+(29907,46,156,65535)
 ```
 
 ## 5. 出力仕様
@@ -109,7 +109,7 @@ distance_m = distance_cm / 100.0
 例:
 
 ```text
-CSV: 29907,46,156,-1
+CSV: 29907,46,156,65535
 
 device_time_ms: 29907
 anchor_1_distance_m: 0.46
@@ -122,9 +122,9 @@ anchor_3_valid: false
 
 ## 6. 無効値の扱い
 
-距離値が負の場合、そのアンカーの測距は失敗したものとして扱う。
+距離値が負の場合、または距離値が `invalid_distance_cm` と一致する場合、そのアンカーの測距は失敗したものとして扱う。
 
-デフォルトの無効値は `-1` とする。
+デフォルトの無効値は、UWB 側で値なしを表す `65535` とする。
 
 無効な距離は以下のように publish する。
 
@@ -155,7 +155,7 @@ serial_port: "/dev/ttyACM2"
 baudrate: 115200
 read_timeout: 0.1
 reconnect_interval: 1.0
-invalid_distance_cm: -1
+invalid_distance_cm: 65535
 frame_id: "uwb"
 ```
 
@@ -182,7 +182,7 @@ ros2 topic echo /uwb/distances
 5. 各列を数値に変換する。
 6. 1 列目を `device_time_ms` に設定する。
 7. 2 から 4 列目を cm から m に変換する。
-8. 負の距離値は無効値として扱い、距離を `NaN`、valid flag を `false` にする。
+8. 負の距離値、または `invalid_distance_cm` と一致する距離値は無効値として扱い、距離を `NaN`、valid flag を `false` にする。
 9. `header.stamp` には ROS 2 ノードで受信した時刻を設定する。
 10. `/uwb/distances` に publish する。
 
