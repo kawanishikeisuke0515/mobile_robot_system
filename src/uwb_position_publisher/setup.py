@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'uwb_distance_publisher = uwb_position_publisher.uwb_distance_publisher:main',
+            'uwb_optitrack_logger = uwb_position_publisher.uwb_optitrack_logger:main',
         ],
     },
 )
