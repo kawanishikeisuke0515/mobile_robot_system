@@ -184,6 +184,8 @@ abs(normalized_center_error) < center_deadband
 
 ```text
 estimated_z <= docking_distance
+abs(estimated_x - target_x) < x_tolerance
+abs(normalized_center_error) < center_deadband
 ```
 
 要求:

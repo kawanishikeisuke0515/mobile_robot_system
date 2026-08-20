@@ -230,13 +230,21 @@ In the implementation, `marker_visible == true` means `/aruco/distance` has been
 
 ### FINAL_DOCKING Stop Condition
 
-Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until `estimated_z` reaches the final stop distance:
+Once the controller is in `FINAL_DOCKING`, it keeps moving forward while correcting lateral position and marker centering until `estimated_z` reaches the final stop distance. After the final stop distance is reached, forward motion stops, but lateral and marker-centering correction continue until all final alignment errors are inside tolerance:
 
 ```text
-if estimated_z <= docking_distance:
+if (
+    estimated_z <= docking_distance
+    and abs(estimated_x - target_x) < x_tolerance
+    and abs(normalized_center_error) < center_deadband
+):
     cmd.linear.x = 0.0
     cmd.linear.y = 0.0
     cmd.angular.z = 0.0
+elif estimated_z <= docking_distance:
+    cmd.linear.x = 0.0
+    cmd.linear.y = lateral control using estimated_x
+    cmd.angular.z = marker-centering control
 ```
 
 If ArUco detection times out during `FINAL_DOCKING`, the controller publishes zero velocity and returns to `PRE_DOCKING`.
@@ -261,7 +269,8 @@ FINAL_DOCKING:
   estimated_z > docking_distance  → robot moves forward with proportional control
   estimated_x is corrected with proportional lateral control
   normalized_center_error is corrected with proportional angular control
-  estimated_z <= docking_distance → robot stops
+  estimated_z <= docking_distance → forward motion stops
+  estimated_z <= docking_distance and all final alignment errors are inside tolerance → robot stops
 ```
 
 ---

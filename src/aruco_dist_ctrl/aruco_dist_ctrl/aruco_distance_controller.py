@@ -238,10 +238,11 @@ class ArucoDistanceController(Node):
 
     def _calculate_final_docking_command(self) -> Twist:
         cmd = Twist()
-        if self.latest_estimated_z <= self.docking_distance:
+        if self._is_final_docking_complete():
             return cmd
 
-        cmd.linear.x = self._calculate_final_forward_velocity(self.latest_estimated_z)
+        if self.latest_estimated_z > self.docking_distance:
+            cmd.linear.x = self._calculate_final_forward_velocity(self.latest_estimated_z)
         cmd.linear.y = self._calculate_lateral_velocity(self.latest_estimated_x)
         cmd.angular.z = self._calculate_angular_velocity(
             self.latest_normalized_center_error,
@@ -271,6 +272,13 @@ class ArucoDistanceController(Node):
             abs(forward_error) < self.z_tolerance
             and abs(lateral_error) < self.x_tolerance
             and abs(self.latest_normalized_center_error) < self.center_deadband
+        )
+
+    def _is_final_docking_complete(self) -> bool:
+        lateral_error = self.latest_estimated_x - self.target_x
+        return (
+            self.latest_estimated_z <= self.docking_distance
+            and abs(lateral_error) < self.x_tolerance
         )
 
     def _estimate_wall_relative_position(
