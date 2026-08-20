@@ -126,9 +126,9 @@ def generate_launch_description():
             }],
         ),
         Node(
-            package='aruco_dist_ctrl',
-            executable='aruco_distance_controller',
-            name='aruco_distance_controller',
+            package='vision_dist_ctrl',
+            executable='vision_distance_controller',
+            name='vision_distance_controller',
             output='screen',
             parameters=[{
                 'target_z': target_z,

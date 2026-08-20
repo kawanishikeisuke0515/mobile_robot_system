@@ -1,6 +1,6 @@
 from setuptools import find_packages, setup
 
-package_name = 'aruco_dist_ctrl'
+package_name = 'vision_dist_ctrl'
 
 setup(
     name=package_name,
@@ -11,7 +11,7 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/docs', [
-            'docs/aruco_dist_ctrl_spec.md',
+            'docs/vision_dist_ctrl_spec.md',
             'docs/requirements_ja.md',
         ]),
     ],
@@ -19,13 +19,13 @@ setup(
     zip_safe=True,
     maintainer='user',
     maintainer_email='user@example.com',
-    description='Distance-based ArUco forward/backward controller',
+    description='Vision-based forward/backward controller',
     license='Apache-2.0',
     tests_require=['pytest'],
     entry_points={
         'console_scripts': [
-            'aruco_distance_controller = aruco_dist_ctrl.aruco_distance_controller:main',
-            'aruco_cmd_logger = aruco_dist_ctrl.aruco_cmd_logger:main',
+            'vision_distance_controller = vision_dist_ctrl.vision_distance_controller:main',
+            'vision_cmd_logger = vision_dist_ctrl.vision_cmd_logger:main',
         ],
     },
 )

@@ -27,7 +27,7 @@ This document outlines the motion control specifications for the rover.
 - `cmd_roboteq`: Drives motors via serial
 
 ## Upstream Integration
-- `aruco_dist_ctrl/aruco_distance_controller` publishes `/rov_cmd_vel`
+- `vision_dist_ctrl/vision_distance_controller` publishes `/rov_cmd_vel`
 - Teleop can also publish `/rov_cmd_vel` when manually driving
 
 ## Usage

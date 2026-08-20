@@ -15,13 +15,13 @@ This version applies a configurable moving average to the wall-relative translat
 ## Node Name
 
 ```text
-aruco_distance_controller
+vision_distance_controller
 ```
 
 ## Package
 
 ```text
-aruco_dist_ctrl
+vision_dist_ctrl
 ```
 
 ---
@@ -360,7 +360,7 @@ control_rate: 20.0         # control loop frequency [Hz]
 
 At the default `control_rate` of 20 Hz, one sample corresponds to about 0.05 seconds. A window size of 5 covers about 0.25 seconds of samples, with an approximate effective delay of `(5 - 1) / 2 / 20 = 0.10` seconds for a simple moving average.
 
-`aruco_docking.launch.py` should expose `position_average_window_size` as a launch argument and pass it to `aruco_distance_controller`.
+`vision_docking.launch.py` should expose `position_average_window_size` as a launch argument and pass it to `vision_distance_controller`.
 
 ---
 
@@ -370,7 +370,7 @@ At the default `control_rate` of 20 Hz, one sample corresponds to about 0.05 sec
 aruco_distance_publisher/aruco_distance_publisher
   publishes /aruco/distance
         ↓
-aruco_dist_ctrl/aruco_distance_controller
+vision_dist_ctrl/vision_distance_controller
   publishes /rov_cmd_vel
         ↓
 locomotion_core/rover_velocity
@@ -385,12 +385,12 @@ locomotion_core/cmd_roboteq
 ## Usage
 
 ```bash
-colcon build --packages-select aruco_interfaces aruco_distance_publisher aruco_dist_ctrl locomotion_core aruco_docking_bringup
+colcon build --packages-select aruco_interfaces aruco_distance_publisher vision_dist_ctrl locomotion_core vision_docking_bringup
 source install/setup.bash
 
 ros2 run aruco_distance_publisher aruco_distance_publisher
-ros2 run aruco_dist_ctrl aruco_distance_controller
-ros2 launch aruco_docking_bringup aruco_docking.launch.py
+ros2 run vision_dist_ctrl vision_distance_controller
+ros2 launch vision_docking_bringup vision_docking.launch.py
 ```
 
 ## Logging ArUco and Command Velocity
@@ -398,8 +398,8 @@ ros2 launch aruco_docking_bringup aruco_docking.launch.py
 Run this logger during experiments to save `/aruco/distance`, the OptiTrack pose, and `/rov_cmd_vel` into one time-aligned CSV file.
 
 ```bash
-ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
-  -p output_dir:=/tmp/aruco_docking_logs \
+ros2 run vision_dist_ctrl vision_cmd_logger --ros-args \
+  -p output_dir:=/tmp/vision_docking_logs \
   -p log_rate:=20.0 \
   -p optitrack_pose_topic:=/vrpn_mocap/RigidBody_1/pose \
   -p target_yaw:=0.0 \
@@ -410,7 +410,7 @@ ros2 run aruco_dist_ctrl aruco_cmd_logger --ros-args \
 The logger writes:
 
 ```text
-aruco_cmd_log_<timestamp>.csv
+vision_cmd_log_<timestamp>.csv
 ```
 
 Main columns:
@@ -432,7 +432,7 @@ raw_estimated_x = aruco_z * sin(theta)
 raw_estimated_z = aruco_z * cos(theta)
 ```
 
-`estimated_z_average` and `estimated_x_average` are the logger-side moving averages of those raw estimates. To match the controller behavior, run the logger with the same `target_yaw`, `position_average_window_size`, and `detection_timeout` values as `aruco_distance_controller`.
+`estimated_z_average` and `estimated_x_average` are the logger-side moving averages of those raw estimates. To match the controller behavior, run the logger with the same `target_yaw`, `position_average_window_size`, and `detection_timeout` values as `vision_distance_controller`.
 
 ---
 

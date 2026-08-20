@@ -2,7 +2,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'aruco_docking_bringup'
+package_name = 'vision_docking_bringup'
 
 setup(
     name=package_name,
@@ -18,7 +18,7 @@ setup(
     zip_safe=True,
     maintainer='user',
     maintainer_email='user@example.com',
-    description='Bringup launch files for ArUco-based docking',
+    description='Bringup launch files for Vision-based docking',
     license='Apache-2.0',
     tests_require=['pytest'],
 )

@@ -1,4 +1,4 @@
-# aruco_dist_ctrl 要求仕様書
+# vision_dist_ctrl 要求仕様書
 
 Version: 0.1 draft
 Date: 2026-06-16
@@ -6,7 +6,7 @@ Status: draft
 
 ## 1. 目的
 
-本要求仕様書は、`aruco_dist_ctrl/aruco_distance_controller` において、ArUcoマーカーを基準にロボットをターゲット位置へドッキングさせるための要求を定義する。
+本要求仕様書は、`vision_dist_ctrl/vision_distance_controller` において、ArUcoマーカーを基準にロボットをターゲット位置へドッキングさせるための要求を定義する。
 
 既存のROS 2 topic、message、launch構成、状態遷移の基本仕様はできるだけ変更しない。
 
@@ -16,10 +16,10 @@ Status: draft
 
 | 項目 | 内容 |
 | --- | --- |
-| Package | `aruco_dist_ctrl` |
-| Node | `aruco_distance_controller` |
-| Main file | `public/mobile_robot_system/src/aruco_dist_ctrl/aruco_dist_ctrl/aruco_distance_controller.py` |
-| Launch | `public/mobile_robot_system/src/aruco_docking_bringup/launch/aruco_docking.launch.py` |
+| Package | `vision_dist_ctrl` |
+| Node | `vision_distance_controller` |
+| Main file | `public/mobile_robot_system/src/vision_dist_ctrl/vision_dist_ctrl/vision_distance_controller.py` |
+| Launch | `public/mobile_robot_system/src/vision_docking_bringup/launch/vision_docking.launch.py` |
 
 ## 3. ノードの目的
 
@@ -260,7 +260,7 @@ abs(normalized_center_error) < center_deadband
 AIが設計仕様書を作成する場合、以下を守ること。
 
 1. 既存topic、message、node責務を勝手に変更しない。
-2. `aruco_distance_controller` の責務は速度指令生成までとする。
+2. `vision_distance_controller` の責務は速度指令生成までとする。
 3. motor commandの不感帯補償は本nodeで直接扱わない。
 4. 追加parameterが必要な場合は、既存挙動と互換になるdefault値を定義する。
 5. `position_average_window_size` のdefaultは、実機チューニング初期値として `5` とする。
@@ -271,7 +271,7 @@ AIが設計仕様書を作成する場合、以下を守ること。
 
 要求仕様一覧:
 
-この要求仕様に従って、ROS2ノード `aruco_distance_controller` の仕様を整理してください。
+この要求仕様に従って、ROS2ノード `vision_distance_controller` の仕様を整理してください。
 
 レビュー観点:
 

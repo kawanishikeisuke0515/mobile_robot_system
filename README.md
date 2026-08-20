@@ -1,7 +1,7 @@
 # Mobile Robot System
 
 ## Overview
-This ROS2 workspace contains the mobile robot packages for ArUco marker distance publishing, distance-based docking control, and wheel/motor command output.
+This ROS2 workspace contains the mobile robot packages for ArUco marker distance publishing, vision-based docking control, and wheel/motor command output.
 
 ## Workspace Layout
 - This directory itself is a ROS2 workspace root
@@ -9,8 +9,8 @@ This ROS2 workspace contains the mobile robot packages for ArUco marker distance
 - Build from this repository root
 - Main packages:
   - `aruco_distance_publisher`: detects ArUco markers and publishes marker distance
-  - `aruco_dist_ctrl`: subscribes to marker distance and publishes velocity commands
-  - `aruco_docking_bringup`: launch files for the full docking stack
+  - `vision_dist_ctrl`: subscribes to marker distance and publishes velocity commands
+  - `vision_docking_bringup`: launch files for the full docking stack
   - `locomotion_core`: wheel velocity and motor controller nodes
   - `aruco_interfaces`: custom ArUco message definitions
 
@@ -50,7 +50,7 @@ ros2 topic echo /aruco/distance
 ## Run Docking Stack
 ```bash
 source install/setup.bash
-ros2 launch aruco_docking_bringup aruco_docking.launch.py
+ros2 launch vision_docking_bringup vision_docking.launch.py
 ```
 
 ## Run Keyboard Teleop

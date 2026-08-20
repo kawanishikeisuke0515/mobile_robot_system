@@ -25,11 +25,11 @@ def _mean(values: Deque[float]) -> float:
     return sum(values) / len(values)
 
 
-class ArucoCmdLogger(Node):
+class VisionCmdLogger(Node):
     def __init__(self):
-        super().__init__('aruco_cmd_logger')
+        super().__init__('vision_cmd_logger')
 
-        self.declare_parameter('output_dir', '/tmp/aruco_docking_logs')
+        self.declare_parameter('output_dir', '/tmp/vision_docking_logs')
         self.declare_parameter('log_rate', 20.0)
         self.declare_parameter('flush_every_rows', 20)
         self.declare_parameter('optitrack_pose_topic', '/vrpn_mocap/RigidBody_1/pose')
@@ -58,7 +58,7 @@ class ArucoCmdLogger(Node):
 
         os.makedirs(self.output_dir, exist_ok=True)
         stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        self.csv_path = os.path.join(self.output_dir, f'aruco_cmd_log_{stamp}.csv')
+        self.csv_path = os.path.join(self.output_dir, f'vision_cmd_log_{stamp}.csv')
 
         self.csv_file = open(self.csv_path, 'w', newline='')
         self.writer = csv.writer(self.csv_file)
@@ -225,7 +225,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = None
     try:
-        node = ArucoCmdLogger()
+        node = VisionCmdLogger()
         rclpy.spin(node)
     except (KeyboardInterrupt, ExternalShutdownException):
         pass

@@ -48,7 +48,7 @@ Downstream controllers use this value to decide whether it is safe to start mark
 - `aruco_distance_publisher`: Main node for detection and publishing
 
 ## Downstream Integration
-- `aruco_dist_ctrl/aruco_distance_controller` subscribes to `/aruco/distance`
+- `vision_dist_ctrl/vision_distance_controller` subscribes to `/aruco/distance`
 - The controller publishes `/rov_cmd_vel` for `locomotion_core/rover_velocity`
 
 ## Dependencies

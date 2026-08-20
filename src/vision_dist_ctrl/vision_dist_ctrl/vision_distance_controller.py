@@ -27,9 +27,9 @@ def _mean(values: Deque[float]) -> float:
     return sum(values) / len(values)
 
 
-class ArucoDistanceController(Node):
+class VisionDistanceController(Node):
     def __init__(self):
-        super().__init__('aruco_distance_controller')
+        super().__init__('vision_distance_controller')
 
         self.declare_parameter('target_z', 1.3)
         self.declare_parameter('kp_z', 2.0)
@@ -366,7 +366,7 @@ def main(args=None):
     rclpy.init(args=args)
     node = None
     try:
-        node = ArucoDistanceController()
+        node = VisionDistanceController()
         rclpy.spin(node)
     finally:
         if node is not None:
