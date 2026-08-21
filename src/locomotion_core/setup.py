@@ -19,7 +19,6 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', [
             'launch/wheel_control.launch.py',
-            'launch/keyboard_teleop.launch.py',
         ]),
         ('share/' + package_name + '/docs', ['docs/generic_motion_control_spec.md']),
     ],

@@ -53,22 +53,22 @@ source install/setup.bash
 ros2 launch vision_docking_bringup vision_docking.launch.py
 ```
 
-## Run Keyboard Teleop
+## Run Wheel Control With Keyboard Teleop
 ```bash
 source install/setup.bash
-ros2 launch locomotion_core keyboard_teleop.launch.py
+ros2 launch locomotion_core wheel_control.launch.py
 ```
 
-This launch publishes keyboard `cmd_vel` commands to `/rov_cmd_vel` and starts:
+This launch starts:
 
-- `teleop_twist_keyboard`
 - `locomotion_core/rover_velocity`
 - `locomotion_core/cmd_roboteq`
 
-If keyboard input is not captured by the launch terminal, run teleop in a separate terminal window:
+Run keyboard teleop in a separate terminal so it can capture keyboard input:
 
 ```bash
-ros2 launch locomotion_core keyboard_teleop.launch.py teleop_prefix:="xterm -e"
+source install/setup.bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:=/rov_cmd_vel
 ```
 
 ## Distance Publisher Node Info
