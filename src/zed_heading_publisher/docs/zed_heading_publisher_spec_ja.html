@@ -1,0 +1,864 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ZED Heading Publisher 設計仕様書</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f6f7f9;
+      --paper: #ffffff;
+      --ink: #1f2933;
+      --muted: #667085;
+      --line: #d9e0e8;
+      --line-soft: #edf1f5;
+      --accent: #0f766e;
+      --accent-ink: #0b4f49;
+      --accent-soft: #e3f4f1;
+      --warn: #a15c07;
+      --warn-soft: #fff4df;
+      --code-bg: #18212b;
+      --code-ink: #e8eef5;
+      --shadow: 0 18px 50px rgba(31, 41, 51, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Hiragino Sans",
+        "Yu Gothic",
+        "Noto Sans JP",
+        sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      padding: 0.12rem 0.34rem;
+      border-radius: 5px;
+      background: var(--line-soft);
+      color: #233142;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 1rem 0 0;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      line-height: 1.55;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .hero {
+      background:
+        linear-gradient(135deg, rgba(15, 118, 110, 0.14), rgba(48, 71, 94, 0.08)),
+        var(--paper);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .hero-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 28px 34px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent-ink);
+      font-size: 0.82rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.7rem);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 850px;
+      margin: 18px 0 0;
+      color: #344054;
+      font-size: 1.08rem;
+    }
+
+    .meta-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      max-width: 780px;
+      margin-top: 28px;
+    }
+
+    .meta-item {
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.72);
+    }
+
+    .meta-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 700;
+    }
+
+    .meta-value {
+      display: block;
+      margin-top: 2px;
+      font-weight: 700;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 270px;
+      gap: 26px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .toc {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .toc-title {
+      margin: 0 0 10px;
+      font-size: 0.88rem;
+      font-weight: 800;
+    }
+
+    .toc a {
+      display: block;
+      padding: 5px 0;
+      color: #475467;
+      font-size: 0.9rem;
+    }
+
+    section {
+      margin-bottom: 22px;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 1.45rem;
+      line-height: 1.3;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 1.05rem;
+      line-height: 1.4;
+    }
+
+    p {
+      margin: 0.7rem 0;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.35rem;
+    }
+
+    li {
+      margin: 0.3rem 0;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 18px;
+    }
+
+    .summary-box {
+      min-height: 105px;
+      padding: 16px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+    }
+
+    .summary-box strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--accent-ink);
+      font-size: 0.92rem;
+    }
+
+    .flow {
+      display: grid;
+      gap: 10px;
+      margin-top: 14px;
+    }
+
+    .flow-row {
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      gap: 12px;
+      align-items: stretch;
+    }
+
+    .flow-label {
+      padding: 12px;
+      border-radius: 8px;
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      font-weight: 800;
+      text-align: center;
+    }
+
+    .flow-detail {
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfd;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.9rem;
+      line-height: 1.65;
+    }
+
+    .table-wrap {
+      overflow-x: auto;
+      margin-top: 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+      background: var(--paper);
+    }
+
+    th,
+    td {
+      padding: 11px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #eef6f4;
+      color: var(--accent-ink);
+      font-size: 0.88rem;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .callout {
+      margin: 16px 0 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      border-radius: 6px;
+      background: var(--accent-soft);
+    }
+
+    .warn {
+      border-left-color: var(--warn);
+      background: var(--warn-soft);
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 0.15rem 0.45rem;
+      border-radius: 999px;
+      background: var(--accent-soft);
+      color: var(--accent-ink);
+      font-size: 0.82rem;
+      font-weight: 800;
+      line-height: 1.4;
+    }
+
+    footer {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px 36px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+      .layout {
+        display: block;
+        padding: 18px;
+      }
+
+      .toc {
+        position: static;
+        margin-bottom: 18px;
+      }
+
+      .meta-grid,
+      .summary-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-row {
+        grid-template-columns: 1fr;
+      }
+
+      section {
+        padding: 20px;
+      }
+    }
+
+    @media print {
+      body {
+        background: #ffffff;
+      }
+
+      .hero,
+      section,
+      .toc {
+        box-shadow: none;
+      }
+
+      .layout {
+        display: block;
+      }
+
+      .toc {
+        position: static;
+        break-after: page;
+      }
+
+      a {
+        color: inherit;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">ROS 2 Design Specification</p>
+      <h1>ZED Heading Publisher 設計仕様書</h1>
+      <p class="lead">
+        ZED2i の magnetometer から raw 磁場値を取得し、hard-iron 補正とゼロ点補正を行って、ロボット yaw を publish する ROS 2 ノードの設計仕様。
+      </p>
+      <div class="meta-grid" aria-label="document metadata">
+        <div class="meta-item">
+          <span class="meta-label">Version</span>
+          <span class="meta-value">0.1 draft</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Date</span>
+          <span class="meta-value">2026-08-21</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status</span>
+          <span class="meta-value">draft</span>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <section id="overview">
+        <h2>1. 概要</h2>
+        <p>
+          <code>zed_heading_publisher</code> は、ZED2i の magnetometer から磁場 raw data を取得し、hard-iron 補正とゼロ点補正を行ったうえで、ロボット yaw 角を ROS 2 topic に publish するノードである。
+        </p>
+        <p>
+          本ノードは方位角の算出と publish を担当する。速度指令、自己位置推定、センサフュージョン、地図座標系への変換は本設計の対象外とし、後段ノードで実施する。
+        </p>
+        <div class="summary-grid">
+          <div class="summary-box">
+            <strong>Node</strong>
+            <code>zed_heading_publisher</code>
+          </div>
+          <div class="summary-box">
+            <strong>Publish Topic</strong>
+            <code>/zed/heading</code>
+          </div>
+          <div class="summary-box">
+            <strong>Yaw Range</strong>
+            <code>[-180, 180)</code> deg<br>
+            <code>[-pi, pi)</code> rad
+          </div>
+        </div>
+      </section>
+
+      <section id="policy">
+        <h2>2. 設計方針</h2>
+        <ul>
+          <li>ZED2i センサ読み取り、磁場補正、yaw 算出、publish を 1 ノードに閉じる。</li>
+          <li>hard-iron 補正値とゼロ点補正値は ROS parameter として外部から変更できるようにする。</li>
+          <li>制御で使う角度は <code>[-pi, pi)</code> の rad として publish する。</li>
+          <li>実験時の確認と rosbag 解析のため、raw 磁場値と補正後磁場値も同じ message に含める。</li>
+          <li>左旋回時に yaw が増加する向きを正方向とする。</li>
+          <li>ZED2i から sensor data を取得できない周期では、古い値を再 publish しない。</li>
+        </ul>
+      </section>
+
+      <section id="package">
+        <h2>3. パッケージ構成</h2>
+        <h3>3.1 実行パッケージ</h3>
+        <pre><code>zed_heading_publisher</code></pre>
+        <p>想定する主要ファイル:</p>
+        <pre><code>zed_heading_publisher/
+  package.xml
+  setup.py
+  setup.cfg
+  resource/zed_heading_publisher
+  zed_heading_publisher/
+    __init__.py
+    zed_heading_publisher.py
+  launch/
+    zed_heading_publisher.launch.py
+  config/
+    zed_heading_publisher.yaml
+  docs/
+    zed_heading_publisher_spec_ja.md</code></pre>
+
+        <h3>3.2 メッセージパッケージ</h3>
+        <p>カスタムメッセージは別パッケージに分離する。</p>
+        <pre><code>zed_interfaces</code></pre>
+        <p>想定する主要ファイル:</p>
+        <pre><code>zed_interfaces/
+  package.xml
+  CMakeLists.txt
+  msg/
+    ZedHeading.msg</code></pre>
+      </section>
+
+      <section id="node">
+        <h2>4. ノード設計</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>項目</th>
+                <th>内容</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>Package</td><td><code>zed_heading_publisher</code></td></tr>
+              <tr><td>Node</td><td><code>zed_heading_publisher</code></td></tr>
+              <tr><td>Executable</td><td><code>zed_heading_publisher</code></td></tr>
+              <tr><td>Main file</td><td><code>zed_heading_publisher/zed_heading_publisher.py</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>4.1 Responsibilities</h3>
+        <ol>
+          <li>ROS parameter の宣言、取得、validation</li>
+          <li>ZED2i camera の open</li>
+          <li>ZED2i sensor data の周期取得</li>
+          <li>magnetometer raw field の取得</li>
+          <li>X-Z 平面の hard-iron 補正</li>
+          <li>磁気角 <code>magnetic_heading_deg</code> の算出</li>
+          <li>ロボット yaw <code>robot_yaw_deg</code>, <code>robot_yaw_rad</code> の算出</li>
+          <li><code>zed_interfaces/msg/ZedHeading</code> の生成</li>
+          <li><code>/zed/heading</code> への publish</li>
+          <li>終了時の ZED2i close</li>
+        </ol>
+      </section>
+
+      <section id="topics">
+        <h2>5. Topic 設計</h2>
+        <h3>5.1 Subscribe Topic</h3>
+        <p>なし。本ノードは ROS topic から sensor data を subscribe しない。ZED SDK の <code>pyzed.sl.Camera</code> から直接 sensor data を取得する。</p>
+
+        <h3>5.2 Publish Topic</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Topic</th>
+                <th>Type</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/zed/heading</code></td>
+                <td><code>zed_interfaces/msg/ZedHeading</code></td>
+                <td>raw 磁場値、補正後磁場値、磁気角、ロボット yaw を publish する</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>5.3 Message Fields</h3>
+        <pre><code>std_msgs/Header header
+
+float32 raw_x
+float32 raw_z
+
+float32 corrected_x
+float32 corrected_z
+
+float32 magnetic_heading_deg
+float32 robot_yaw_deg
+float32 robot_yaw_rad
+
+bool valid</code></pre>
+
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Field</th>
+                <th>Type</th>
+                <th>Requirement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>header</code></td><td><code>std_msgs/Header</code></td><td>publish 時刻と <code>frame_id</code> を格納すること。</td></tr>
+              <tr><td><code>raw_x</code></td><td><code>float32</code></td><td>ZED2i magnetometer の未補正 X 軸磁場値を格納すること。</td></tr>
+              <tr><td><code>raw_z</code></td><td><code>float32</code></td><td>ZED2i magnetometer の未補正 Z 軸磁場値を格納すること。</td></tr>
+              <tr><td><code>corrected_x</code></td><td><code>float32</code></td><td><code>raw_x - center_x</code> を格納すること。</td></tr>
+              <tr><td><code>corrected_z</code></td><td><code>float32</code></td><td><code>raw_z - center_z</code> を格納すること。</td></tr>
+              <tr><td><code>magnetic_heading_deg</code></td><td><code>float32</code></td><td>補正後 X-Z 平面から算出した磁気角[deg]を格納すること。範囲は <code>[-180, 180)</code> とする。</td></tr>
+              <tr><td><code>robot_yaw_deg</code></td><td><code>float32</code></td><td>ゼロ点補正後のロボット yaw[deg]を格納すること。範囲は <code>[-180, 180)</code> とする。</td></tr>
+              <tr><td><code>robot_yaw_rad</code></td><td><code>float32</code></td><td><code>robot_yaw_deg</code> を rad に変換した値を格納すること。範囲は <code>[-pi, pi)</code> とする。</td></tr>
+              <tr><td><code>valid</code></td><td><code>bool</code></td><td>センサ取得と角度算出が成功した場合 <code>true</code> とすること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="parameters">
+        <h2>6. Parameters</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Parameter</th>
+                <th>Type</th>
+                <th>Default</th>
+                <th>Range / Constraint</th>
+                <th>用途</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>center_x</code></td><td><code>double</code></td><td><code>-2.68835</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 X</td></tr>
+              <tr><td><code>center_z</code></td><td><code>double</code></td><td><code>-10.07476</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 Z</td></tr>
+              <tr><td><code>zero_heading_deg</code></td><td><code>double</code></td><td><code>39.1775</code></td><td>finite value</td><td>ロボット実 yaw = 0 deg のときの磁気角</td></tr>
+              <tr><td><code>publish_rate_hz</code></td><td><code>double</code></td><td><code>20.0</code></td><td><code>&gt; 0.0</code></td><td>sensor data 取得と publish の周期</td></tr>
+              <tr><td><code>frame_id</code></td><td><code>string</code></td><td><code>zed2i_mag</code></td><td>non-empty</td><td>message header の frame id</td></tr>
+              <tr><td><code>invert_yaw</code></td><td><code>bool</code></td><td><code>false</code></td><td><code>true</code> or <code>false</code></td><td>yaw 符号反転が必要な場合に使用する</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>6.1 Parameter Requirements</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Requirement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">PR-001</span></td><td><code>center_x</code>, <code>center_z</code>, <code>zero_heading_deg</code> は source code 固定値ではなく ROS parameter から設定できること。</td></tr>
+              <tr><td><span class="tag">PR-002</span></td><td><code>publish_rate_hz &lt;= 0.0</code> の場合、起動時に validation error とすること。</td></tr>
+              <tr><td><span class="tag">PR-003</span></td><td><code>frame_id</code> が空文字の場合、起動時に validation error とすること。</td></tr>
+              <tr><td><span class="tag">PR-004</span></td><td><code>center_x</code>, <code>center_z</code>, <code>zero_heading_deg</code> が finite value でない場合、起動時に validation error とすること。</td></tr>
+              <tr><td><span class="tag">PR-005</span></td><td>起動時 log に <code>center_x</code>, <code>center_z</code>, <code>zero_heading_deg</code>, <code>publish_rate_hz</code>, <code>frame_id</code>, <code>invert_yaw</code> を出力すること。</td></tr>
+              <tr><td><span class="tag">PR-006</span></td><td>parameter は launch 引数または YAML から設定できること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>6.2 YAML Example</h3>
+        <pre><code>zed_heading_publisher:
+  ros__parameters:
+    center_x: -2.68835
+    center_z: -10.07476
+    zero_heading_deg: 39.1775
+    publish_rate_hz: 20.0
+    frame_id: zed2i_mag
+    invert_yaw: false</code></pre>
+      </section>
+
+      <section id="angles">
+        <h2>7. 角度定義</h2>
+        <h3>7.1 Coordinate Selection</h3>
+        <p>ZED2i magnetometer の X-Z 平面を使用する。</p>
+        <pre><code>raw_x = magnetic_field_uncalibrated[0]
+raw_z = magnetic_field_uncalibrated[2]</code></pre>
+        <p>Y 軸は本ノードの heading 算出には使用しない。</p>
+
+        <h3>7.2 Hard-Iron Correction</h3>
+        <pre><code>corrected_x = raw_x - center_x
+corrected_z = raw_z - center_z</code></pre>
+
+        <h3>7.3 Magnetic Heading</h3>
+        <pre><code>magnetic_heading_deg = atan2(corrected_x, corrected_z) [deg]
+magnetic_heading_deg = normalize_to_180(magnetic_heading_deg)</code></pre>
+
+        <h3>7.4 Robot Yaw</h3>
+        <pre><code>robot_yaw_deg = magnetic_heading_deg - zero_heading_deg
+robot_yaw_deg = normalize_to_180(robot_yaw_deg)</code></pre>
+        <p><code>invert_yaw == true</code> の場合は、正規化前に符号を反転する。</p>
+        <pre><code>robot_yaw_deg = -robot_yaw_deg
+robot_yaw_deg = normalize_to_180(robot_yaw_deg)</code></pre>
+        <pre><code>robot_yaw_rad = radians(robot_yaw_deg)</code></pre>
+
+        <div class="callout">
+          ロボットが左旋回したときに <code>robot_yaw_deg</code> と <code>robot_yaw_rad</code> が増加する向きを正方向とする。現時点の実機確認では default の <code>invert_yaw: false</code> でこの向きになる。
+        </div>
+      </section>
+
+      <section id="normalization">
+        <h2>8. Angle Normalization</h2>
+        <pre><code>normalize_to_180(angle_deg) = (angle_deg + 180.0) % 360.0 - 180.0</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Input [deg]</th>
+                <th>Output [deg]</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><code>0.0</code></td><td><code>0.0</code></td></tr>
+              <tr><td><code>180.0</code></td><td><code>-180.0</code></td></tr>
+              <tr><td><code>181.0</code></td><td><code>-179.0</code></td></tr>
+              <tr><td><code>359.0</code></td><td><code>-1.0</code></td></tr>
+              <tr><td><code>-181.0</code></td><td><code>179.0</code></td></tr>
+              <tr><td><code>-360.0</code></td><td><code>0.0</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="flow">
+        <h2>9. Control Flow</h2>
+        <p>本ノードは明示的な state machine を持たない。timer callback により周期的に sensor data 取得、補正、publish を行う。</p>
+        <div class="flow">
+          <div class="flow-row">
+            <div class="flow-label">STARTUP</div>
+            <div class="flow-detail">declare parameters<br>validate parameters<br>open ZED2i<br>create publisher<br>create timer</div>
+          </div>
+          <div class="flow-row">
+            <div class="flow-label">TIMER_LOOP</div>
+            <div class="flow-detail">get_sensors_data<br>get_magnetometer_data<br>get_magnetic_field_uncalibrated<br>extract raw_x and raw_z<br>apply hard-iron correction<br>calculate yaw<br>publish /zed/heading</div>
+          </div>
+          <div class="flow-row">
+            <div class="flow-label">SHUTDOWN</div>
+            <div class="flow-detail">close ZED2i</div>
+          </div>
+        </div>
+
+        <h3>9.1 Startup Requirements</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Requirement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">CF-001</span></td><td>node 起動時に全 parameter を宣言、取得、validation すること。</td></tr>
+              <tr><td><span class="tag">CF-002</span></td><td>ZED2i は <code>pyzed.sl.Camera</code> で open すること。</td></tr>
+              <tr><td><span class="tag">CF-003</span></td><td><code>camera_resolution</code> は初期実装では <code>HD720</code> とすること。</td></tr>
+              <tr><td><span class="tag">CF-004</span></td><td><code>camera_fps</code> は初期実装では <code>30</code> とすること。</td></tr>
+              <tr><td><span class="tag">CF-005</span></td><td><code>depth_mode</code> は <code>NONE</code> とすること。</td></tr>
+              <tr><td><span class="tag">CF-006</span></td><td>ZED2i を open できない場合は起動失敗とすること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>9.2 Timer Loop Requirements</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Requirement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">CF-010</span></td><td>timer period は <code>1.0 / publish_rate_hz</code> とすること。</td></tr>
+              <tr><td><span class="tag">CF-011</span></td><td>sensor data は <code>sl.TIME_REFERENCE.CURRENT</code> で取得すること。</td></tr>
+              <tr><td><span class="tag">CF-012</span></td><td><code>get_sensors_data</code> が成功した周期のみ publish すること。</td></tr>
+              <tr><td><span class="tag">CF-013</span></td><td>publish message の <code>header.stamp</code> は publish 時の ROS clock とすること。</td></tr>
+              <tr><td><span class="tag">CF-014</span></td><td>publish message の <code>header.frame_id</code> は <code>frame_id</code> parameter とすること。</td></tr>
+              <tr><td><span class="tag">CF-015</span></td><td>publish 成功時の <code>valid</code> は <code>true</code> とすること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="qos">
+        <h2>10. QoS</h2>
+        <p>初期実装では以下を使用する。</p>
+        <pre><code>history: keep last
+depth: 10
+reliability: reliable</code></pre>
+        <p>高頻度 publish で最新値のみが重要になった場合は、<code>depth: 1</code> または <code>best effort</code> への変更を検討する。</p>
+      </section>
+
+      <section id="failure">
+        <h2>11. Failure Cases</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Failure Case</th>
+                <th>Required Behavior</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">FC-001</span></td><td>parameter validation error</td><td>起動失敗とする</td></tr>
+              <tr><td><span class="tag">FC-002</span></td><td>ZED SDK import error</td><td>error log を出し、起動失敗とする</td></tr>
+              <tr><td><span class="tag">FC-003</span></td><td>ZED2i open failure</td><td>error log を出し、起動失敗とする</td></tr>
+              <tr><td><span class="tag">FC-004</span></td><td><code>get_sensors_data</code> failure</td><td>warn log を出し、その周期では publish しない</td></tr>
+              <tr><td><span class="tag">FC-005</span></td><td>magnetometer data 取得 failure</td><td>warn log を出し、その周期では publish しない</td></tr>
+              <tr><td><span class="tag">FC-006</span></td><td>raw 磁場値が finite value でない</td><td>warn log を出し、その周期では publish しない</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="callout warn">
+          warn log は必要に応じて throttle し、センサ取得失敗が連続した場合でも log が過剰に増えないようにする。
+        </div>
+      </section>
+
+      <section id="safety">
+        <h2>12. Safety Requirements</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Requirement</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">SR-001</span></td><td>sensor data 取得失敗時に古い yaw を再 publish しないこと。</td></tr>
+              <tr><td><span class="tag">SR-002</span></td><td>raw 磁場値が不正な場合に推定値を捏造して publish しないこと。</td></tr>
+              <tr><td><span class="tag">SR-003</span></td><td>本ノードは速度指令や motor command を publish しないこと。</td></tr>
+              <tr><td><span class="tag">SR-004</span></td><td><code>center_x</code>, <code>center_z</code>, <code>zero_heading_deg</code> の使用値を起動 log で追跡できること。</td></tr>
+              <tr><td><span class="tag">SR-005</span></td><td>yaw 正方向は左旋回で増加する向きとし、後段の <code>angular.z</code> 正方向と整合させること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="test">
+        <h2>13. 実機確認項目</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>ID</th>
+                <th>Test</th>
+                <th>Expected Result</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td><span class="tag">TT-001</span></td><td>ロボット実 yaw = 0 deg 方向に置いて起動する</td><td><code>robot_yaw_deg</code> が <code>0 deg</code> 付近になる</td></tr>
+              <tr><td><span class="tag">TT-002</span></td><td>ロボットを左にゆっくり旋回する</td><td><code>robot_yaw_deg</code> が増加する</td></tr>
+              <tr><td><span class="tag">TT-003</span></td><td>ロボットを右にゆっくり旋回する</td><td><code>robot_yaw_deg</code> が減少する</td></tr>
+              <tr><td><span class="tag">TT-004</span></td><td><code>+179 deg</code> 付近からさらに左旋回する</td><td><code>robot_yaw_deg</code> が <code>-180 deg</code> 付近へ連続的に折り返す</td></tr>
+              <tr><td><span class="tag">TT-005</span></td><td><code>/zed/heading</code> を rosbag 記録する</td><td>raw, corrected, yaw が同一 timestamp の message として記録される</td></tr>
+              <tr><td><span class="tag">TT-006</span></td><td><code>center_x</code>, <code>center_z</code>, <code>zero_heading_deg</code> を YAML で変更して起動する</td><td>起動 log と publish 値に parameter 変更が反映される</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="future">
+        <h2>14. Future Extensions</h2>
+        <p>初期実装では 1 ノード構成とする。将来、補正アルゴリズムやセンサフュージョンを分離したくなった場合は、以下の 2 ノード構成への移行を検討する。</p>
+        <pre><code>zed_magnetometer_publisher
+  -> raw magnetic field を publish
+
+heading_estimator
+  -> raw magnetic field を subscribe
+  -> 補正、yaw 算出、publish</code></pre>
+        <p>ただし、初期実装では topic 数、launch 設定、同期処理の複雑化を避けるため、<code>zed_heading_publisher</code> 1 ノードに集約する。</p>
+      </section>
+    </main>
+
+    <aside class="toc" aria-label="table of contents">
+      <p class="toc-title">目次</p>
+      <a href="#overview">1. 概要</a>
+      <a href="#policy">2. 設計方針</a>
+      <a href="#package">3. パッケージ構成</a>
+      <a href="#node">4. ノード設計</a>
+      <a href="#topics">5. Topic 設計</a>
+      <a href="#parameters">6. Parameters</a>
+      <a href="#angles">7. 角度定義</a>
+      <a href="#normalization">8. Angle Normalization</a>
+      <a href="#flow">9. Control Flow</a>
+      <a href="#qos">10. QoS</a>
+      <a href="#failure">11. Failure Cases</a>
+      <a href="#safety">12. Safety Requirements</a>
+      <a href="#test">13. 実機確認項目</a>
+      <a href="#future">14. Future Extensions</a>
+    </aside>
+  </div>
+
+  <footer>
+    Source: <code>mobile_robot_system/src/zed_heading_publisher/docs/zed_heading_publisher_spec_ja.md</code>
+  </footer>
+</body>
+</html>
