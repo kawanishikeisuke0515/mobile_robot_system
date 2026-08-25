@@ -594,9 +594,9 @@ bool valid</code></pre>
               </tr>
             </thead>
             <tbody>
-              <tr><td><code>center_x</code></td><td><code>double</code></td><td><code>-2.68835</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 X</td></tr>
-              <tr><td><code>center_z</code></td><td><code>double</code></td><td><code>-10.07476</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 Z</td></tr>
-              <tr><td><code>zero_heading_deg</code></td><td><code>double</code></td><td><code>39.1775</code></td><td>finite value</td><td>ロボット実 yaw = 0 deg のときの磁気角</td></tr>
+              <tr><td><code>center_x</code></td><td><code>double</code></td><td><code>-2.5354</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 X</td></tr>
+              <tr><td><code>center_z</code></td><td><code>double</code></td><td><code>-10.3439</code></td><td>finite value</td><td>360 度回転データから求めた磁場中心 Z</td></tr>
+              <tr><td><code>zero_heading_deg</code></td><td><code>double</code></td><td><code>40.0</code></td><td>finite value</td><td>ロボット実 yaw = 0 deg のときの磁気角</td></tr>
               <tr><td><code>publish_rate_hz</code></td><td><code>double</code></td><td><code>20.0</code></td><td><code>&gt; 0.0</code></td><td>sensor data 取得と publish の周期</td></tr>
               <tr><td><code>frame_id</code></td><td><code>string</code></td><td><code>zed2i_mag</code></td><td>non-empty</td><td>message header の frame id</td></tr>
               <tr><td><code>invert_yaw</code></td><td><code>bool</code></td><td><code>false</code></td><td><code>true</code> or <code>false</code></td><td>yaw 符号反転が必要な場合に使用する</td></tr>
@@ -627,9 +627,9 @@ bool valid</code></pre>
         <h3>6.2 YAML Example</h3>
         <pre><code>zed_heading_publisher:
   ros__parameters:
-    center_x: -2.68835
-    center_z: -10.07476
-    zero_heading_deg: 39.1775
+    center_x: -2.5354
+    center_z: -10.3439
+    zero_heading_deg: 40.0
     publish_rate_hz: 20.0
     frame_id: zed2i_mag
     invert_yaw: false</code></pre>

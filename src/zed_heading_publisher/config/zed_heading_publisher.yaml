@@ -1,8 +1,8 @@
 zed_heading_publisher:
   ros__parameters:
-    center_x: -2.68835
-    center_z: -10.07476
-    zero_heading_deg: 39.1775
+    center_x: -2.5354
+    center_z: -10.3439
+    zero_heading_deg: 40.0
     publish_rate_hz: 20.0
     frame_id: "zed2i_mag"
     invert_yaw: false

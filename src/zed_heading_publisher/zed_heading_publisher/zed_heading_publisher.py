@@ -67,9 +67,9 @@ class ZedHeadingPublisher(Node):
     def __init__(self):
         super().__init__('zed_heading_publisher')
 
-        self.declare_parameter('center_x', -2.68835)
-        self.declare_parameter('center_z', -10.07476)
-        self.declare_parameter('zero_heading_deg', 39.1775)
+        self.declare_parameter('center_x', -2.5354)
+        self.declare_parameter('center_z', -10.3439)
+        self.declare_parameter('zero_heading_deg', 40.0)
         self.declare_parameter('publish_rate_hz', 20.0)
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)
