@@ -2,18 +2,19 @@
 
 ## 1. 概要
 
-`uwb_position_publisher` は、Arduino から USB シリアルで送信される UWB 測距 CSV を読み取り、ROS 2 トピック `/uwb/distances` に publish するパッケージである。
+`uwb_position_publisher` は、Arduino から USB シリアルで送信される UWB 測距 CSV を読み取り、ROS 2 トピック `/uwb/distances` に publish し、別ノードで 3 アンカー距離から `/uwb/position` を publish するパッケージである。
 
-本ノードは測距データの取り込み、入力検証、単位変換、無効値判定、再接続処理を担当する。3 アンカー距離からの位置推定は本設計の対象外とし、後段ノードで実施する。
+`uwb_distance_publisher` は測距データの取り込み、入力検証、単位変換、無効値判定、再接続処理を担当する。`uwb_position_publisher` は `/uwb/distances` を subscribe し、アンカー座標を用いて 2D 位置推定を担当する。
 
 ## 2. 設計方針
 
-- シリアル入力と ROS 2 publish の責務を 1 ノードに閉じる。
+- シリアル入力と距離 publish の責務を `uwb_distance_publisher` に閉じる。
+- 位置推定と位置 publish の責務を `uwb_position_publisher` に閉じる。
 - 入力 CSV の不正行は publish せず破棄し、warn ログで原因を追跡できるようにする。
 - 距離値の単位は ROS 側で SI 単位系に統一し、cm から m に変換する。
 - 測距失敗は `NaN` と valid flag の組で表現する。
 - シリアル切断時もノードを終了させず、一定間隔で再接続する。
-- 後続の位置推定ノードが raw data と validity を判断できる情報を保持する。
+- 位置推定ノードが raw data と validity を判断できる情報を `/uwb/distances` に保持する。
 
 ## 3. パッケージ構成
 
@@ -34,10 +35,12 @@ uwb_position_publisher/
   uwb_position_publisher/
     __init__.py
     uwb_distance_publisher.py
+    uwb_position_publisher.py
   launch/
     uwb_distance_publisher.launch.py
   config/
     uwb_distance_publisher.yaml
+    uwb_position_publisher.yaml
   doc/
     requirements_ja.md
     design_ja.md
@@ -59,6 +62,7 @@ uwb_interfaces/
   CMakeLists.txt
   msg/
     UwbDistances.msg
+    UwbPosition.msg
 ```
 
 ## 4. ノード設計
@@ -68,6 +72,9 @@ uwb_interfaces/
 ```text
 node name: uwb_distance_publisher
 executable: uwb_distance_publisher
+
+node name: uwb_position_publisher
+executable: uwb_position_publisher
 ```
 
 ### 4.2 Responsibilities
@@ -84,7 +91,18 @@ executable: uwb_distance_publisher
 8. `/uwb/distances` への publish
 9. シリアル異常時の close と reconnect
 
+`uwb_position_publisher` は以下を担当する。
+
+1. `/uwb/distances` の subscribe
+2. アンカー座標 parameter の宣言と取得
+3. 3 アンカー距離の validity 判定
+4. 2D trilateration による `x_m`, `y_m` 推定
+5. `UwbPosition` メッセージ生成
+6. `/uwb/position` への publish
+
 ## 5. パラメータ設計
+
+### 5.1 `uwb_distance_publisher`
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
@@ -94,6 +112,21 @@ executable: uwb_distance_publisher
 | `reconnect_interval` | double | `1.0` | 再接続試行間隔 [s] |
 | `invalid_distance_cm` | int | `65535` | 測距失敗を表す距離値 [cm] |
 | `frame_id` | string | `uwb` | publish する header の frame id |
+| `timer_period` | double | `0.01` | シリアル読み取り周期 [s] |
+
+### 5.2 `uwb_position_publisher`
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `uwb_distances_topic` | string | `/uwb/distances` | subscribe する UWB 距離 topic |
+| `uwb_position_topic` | string | `/uwb/position` | publish する UWB 位置 topic |
+| `anchor_1_x` | double | `0.0` | アンカー 1 の x 座標 [m] |
+| `anchor_1_y` | double | `0.0` | アンカー 1 の y 座標 [m] |
+| `anchor_2_x` | double | `1.0` | アンカー 2 の x 座標 [m] |
+| `anchor_2_y` | double | `0.0` | アンカー 2 の y 座標 [m] |
+| `anchor_3_x` | double | `0.0` | アンカー 3 の x 座標 [m] |
+| `anchor_3_y` | double | `1.0` | アンカー 3 の y 座標 [m] |
+| `min_anchor_determinant` | double | `1.0e-9` | アンカー配置の特異判定しきい値 |
 
 実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。
 
@@ -190,6 +223,11 @@ valid = false
 ```text
 topic: /uwb/distances
 type: uwb_interfaces/msg/UwbDistances
+publisher node: uwb_distance_publisher
+
+topic: /uwb/position
+type: uwb_interfaces/msg/UwbPosition
+publisher node: uwb_position_publisher
 ```
 
 ### 8.2 QoS
@@ -220,6 +258,22 @@ bool anchor_3_valid
 
 string raw_line
 ```
+
+`/uwb/position` message:
+
+```text
+std_msgs/Header header
+uint32 device_time_ms
+
+float32 x_m
+float32 y_m
+
+bool valid
+```
+
+3 アンカー距離がすべて有効で、アンカー配置が特異でない場合に `valid = true` とし、推定位置 `x_m`, `y_m` を publish する。
+
+距離が無効、または 3 点測位を解けない場合は `valid = false` とし、`x_m`, `y_m` は `NaN` とする。
 
 ### 8.4 Header
 
@@ -399,11 +453,24 @@ uwb_distance_publisher:
     reconnect_interval: 1.0
     invalid_distance_cm: 65535
     frame_id: "uwb"
+    timer_period: 0.01
+
+uwb_position_publisher:
+  ros__parameters:
+    uwb_distances_topic: "/uwb/distances"
+    uwb_position_topic: "/uwb/position"
+    anchor_1_x: 0.0
+    anchor_1_y: 0.0
+    anchor_2_x: 1.0
+    anchor_2_y: 0.0
+    anchor_3_x: 0.0
+    anchor_3_y: 1.0
+    min_anchor_determinant: 1.0e-9
 ```
 
 ### 14.2 Launch
 
-launch file は config yaml を読み込んでノードを起動する。
+launch file は distance / position それぞれの config yaml を読み込んで 2 ノードを起動する。
 
 ```bash
 ros2 launch uwb_position_publisher uwb_distance_publisher.launch.py
@@ -415,6 +482,10 @@ ros2 launch uwb_position_publisher uwb_distance_publisher.launch.py
 ros2 run uwb_position_publisher uwb_distance_publisher --ros-args \
   -p serial_port:=/dev/ttyACM2 \
   -p baudrate:=115200
+
+ros2 run uwb_position_publisher uwb_position_publisher --ros-args \
+  -p uwb_distances_topic:=/uwb/distances \
+  -p uwb_position_topic:=/uwb/position
 ```
 
 ## 15. テスト設計

@@ -7,7 +7,8 @@ from pathlib import Path
 
 def generate_launch_description():
     package_share = Path(get_package_share_directory('uwb_position_publisher'))
-    config_path = package_share / 'config' / 'uwb_distance_publisher.yaml'
+    distance_config_path = package_share / 'config' / 'uwb_distance_publisher.yaml'
+    position_config_path = package_share / 'config' / 'uwb_position_publisher.yaml'
 
     return LaunchDescription([
         Node(
@@ -15,6 +16,13 @@ def generate_launch_description():
             executable='uwb_distance_publisher',
             name='uwb_distance_publisher',
             output='screen',
-            parameters=[str(config_path)],
+            parameters=[str(distance_config_path)],
+        ),
+        Node(
+            package='uwb_position_publisher',
+            executable='uwb_position_publisher',
+            name='uwb_position_publisher',
+            output='screen',
+            parameters=[str(position_config_path)],
         ),
     ])
