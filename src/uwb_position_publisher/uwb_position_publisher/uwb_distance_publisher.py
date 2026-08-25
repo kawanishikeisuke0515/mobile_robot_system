@@ -105,7 +105,7 @@ class UwbDistancePublisher(Node):
     def __init__(self):
         super().__init__('uwb_distance_publisher')
 
-        self.declare_parameter('serial_port', '/dev/ttyACM2')
+        self.declare_parameter('serial_port', '/dev/ttyACM1')
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('read_timeout', 0.1)
         self.declare_parameter('reconnect_interval', 1.0)
