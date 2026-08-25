@@ -1,0 +1,746 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UWB + ZED Pose Controller 要求仕様書</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f5f7fa;
+      --paper: #ffffff;
+      --ink: #202833;
+      --muted: #647084;
+      --line: #d8e0ea;
+      --line-soft: #edf1f6;
+      --accent: #0e7490;
+      --accent-dark: #155e75;
+      --accent-soft: #e0f2fe;
+      --ok: #0f766e;
+      --warn: #a16207;
+      --danger: #b42318;
+      --code-bg: #17202a;
+      --code-ink: #edf5ff;
+      --shadow: 0 16px 44px rgba(26, 38, 52, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+    }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family:
+        -apple-system,
+        BlinkMacSystemFont,
+        "Segoe UI",
+        "Hiragino Sans",
+        "Yu Gothic",
+        "Noto Sans JP",
+        sans-serif;
+      line-height: 1.75;
+    }
+
+    a {
+      color: var(--accent-dark);
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+
+    code {
+      padding: 0.12rem 0.34rem;
+      border-radius: 5px;
+      background: var(--line-soft);
+      color: #253244;
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+      font-size: 0.92em;
+    }
+
+    pre {
+      margin: 1rem 0 0;
+      padding: 1rem 1.1rem;
+      overflow-x: auto;
+      border-radius: 8px;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      line-height: 1.55;
+    }
+
+    pre code {
+      padding: 0;
+      background: transparent;
+      color: inherit;
+    }
+
+    .hero {
+      border-bottom: 1px solid var(--line);
+      background:
+        linear-gradient(135deg, rgba(14, 116, 144, 0.14), rgba(15, 118, 110, 0.08)),
+        var(--paper);
+    }
+
+    .hero-inner {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 44px 28px 34px;
+    }
+
+    .eyebrow {
+      margin: 0 0 10px;
+      color: var(--accent-dark);
+      font-size: 0.82rem;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: clamp(2rem, 4vw, 3.6rem);
+      line-height: 1.12;
+      letter-spacing: 0;
+    }
+
+    .lead {
+      max-width: 900px;
+      margin: 18px 0 0;
+      color: #344054;
+      font-size: 1.08rem;
+    }
+
+    .meta-grid,
+    .summary-grid,
+    .io-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-top: 24px;
+    }
+
+    .meta-item,
+    .summary-item {
+      min-width: 0;
+      padding: 13px 14px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.76);
+    }
+
+    .meta-label,
+    .summary-label {
+      display: block;
+      color: var(--muted);
+      font-size: 0.78rem;
+      font-weight: 800;
+    }
+
+    .meta-value,
+    .summary-value {
+      display: block;
+      margin-top: 2px;
+      font-weight: 800;
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 280px;
+      gap: 26px;
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 28px;
+    }
+
+    main {
+      min-width: 0;
+    }
+
+    .toc {
+      position: sticky;
+      top: 20px;
+      align-self: start;
+      padding: 18px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    .toc-title {
+      margin: 0 0 10px;
+      font-size: 0.88rem;
+      font-weight: 900;
+    }
+
+    .toc a {
+      display: block;
+      padding: 5px 0;
+      color: #475467;
+      font-size: 0.9rem;
+    }
+
+    section {
+      margin-bottom: 22px;
+      padding: 26px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+    }
+
+    h2 {
+      margin: 0 0 14px;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--line-soft);
+      font-size: 1.45rem;
+      line-height: 1.3;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 1.05rem;
+      line-height: 1.4;
+    }
+
+    p {
+      margin: 0.7rem 0;
+    }
+
+    ul,
+    ol {
+      padding-left: 1.35rem;
+    }
+
+    li {
+      margin: 0.28rem 0;
+    }
+
+    .table-wrap {
+      width: 100%;
+      overflow-x: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      min-width: 680px;
+      font-size: 0.94rem;
+    }
+
+    th,
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--line-soft);
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f8fafc;
+      color: #344054;
+      font-weight: 900;
+      white-space: nowrap;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .badge-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-top: 16px;
+    }
+
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      min-height: 30px;
+      padding: 4px 10px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #f8fafc;
+      color: #344054;
+      font-size: 0.86rem;
+      font-weight: 800;
+      white-space: nowrap;
+    }
+
+    .badge.accent {
+      border-color: #bae6fd;
+      background: var(--accent-soft);
+      color: var(--accent-dark);
+    }
+
+    .callout {
+      margin: 16px 0 0;
+      padding: 14px 16px;
+      border-left: 4px solid var(--accent);
+      border-radius: 8px;
+      background: #f0f9ff;
+    }
+
+    .callout.warn {
+      border-left-color: var(--warn);
+      background: #fffbeb;
+    }
+
+    .status {
+      color: var(--ok);
+      font-weight: 900;
+    }
+
+    .danger {
+      color: var(--danger);
+      font-weight: 900;
+    }
+
+    footer {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 0 28px 34px;
+      color: var(--muted);
+      font-size: 0.9rem;
+    }
+
+    @media (max-width: 920px) {
+      .layout {
+        display: block;
+        padding: 20px;
+      }
+
+      .toc {
+        position: static;
+        margin-bottom: 22px;
+      }
+
+      .meta-grid,
+      .summary-grid,
+      .io-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-inner {
+        padding: 34px 20px 26px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="hero">
+    <div class="hero-inner">
+      <p class="eyebrow">Requirements Draft</p>
+      <h1>UWB + ZED Pose Controller 要求仕様書</h1>
+      <p class="lead">
+        UWB 位置推定と ZED2i heading を入力に、目標位置と目標姿勢へ移動する P 制御ノードの要求を整理する。
+        位置と yaw には許容マージンを持たせ、目標近傍での速度指令の細かな反転を抑制できる構成とする。
+      </p>
+
+      <div class="meta-grid">
+        <div class="meta-item">
+          <span class="meta-label">Version</span>
+          <span class="meta-value">0.1 draft</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Date</span>
+          <span class="meta-value">2026-08-25</span>
+        </div>
+        <div class="meta-item">
+          <span class="meta-label">Status</span>
+          <span class="meta-value status">draft</span>
+        </div>
+      </div>
+
+      <div class="badge-row" aria-label="key topics">
+        <span class="badge accent">/uwb/position</span>
+        <span class="badge accent">/zed/heading</span>
+        <span class="badge accent">/rov_cmd_vel</span>
+        <span class="badge">P control</span>
+        <span class="badge">pose tolerance</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <main>
+      <section id="purpose">
+        <h2>1. 目的</h2>
+        <p>
+          本要求仕様書は、UWB 位置推定結果と ZED2i heading をもとに、ロボットを指定された目標位置および目標姿勢へ移動させる P 制御ノードの要求を定義する。
+        </p>
+        <p>
+          基本の制御方針は <code>vision_dist_ctrl/vision_distance_controller</code> と同じく、ROS 2 topic を subscribe し、<code>geometry_msgs/msg/Twist</code> の速度指令を publish する構成とする。
+        </p>
+        <div class="callout">
+          追加要求は、ターゲット位置とターゲット角度に許容マージンを持たせ、目標近傍で速度指令が細かく反転し続ける状態を抑制できること。
+        </div>
+      </section>
+
+      <section id="target-node">
+        <h2>2. 対象ノード</h2>
+        <p>ノード名は <code>uwb_position_zed_pose_ctrl</code> とする。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>項目</th><th>内容</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>Package</td><td><code>uwb_position_zed_pose_ctrl</code></td></tr>
+              <tr><td>Node</td><td><code>uwb_position_zed_pose_ctrl</code></td></tr>
+              <tr><td>Main file</td><td><code>uwb_position_zed_pose_ctrl/uwb_position_zed_pose_ctrl.py</code></td></tr>
+              <tr><td>Launch</td><td><code>launch/uwb_position_zed_pose_ctrl.launch.py</code></td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="overview">
+        <h2>3. ノードの目的</h2>
+        <p>
+          対象ノードは、UWB で推定した 2D 位置と ZED2i magnetometer 由来の yaw 角を使用し、ロボットを任意の目標 pose へ移動させるための速度指令を生成する。
+        </p>
+        <ol>
+          <li><code>/uwb/position</code> から現在位置 <code>x_m</code>, <code>y_m</code> を取得する。</li>
+          <li><code>/zed/heading</code> から現在 yaw <code>robot_yaw_rad</code> を取得する。</li>
+          <li><code>target_x</code>, <code>target_y</code>, <code>target_yaw</code> で定義された目標 pose へ到達する。</li>
+          <li>位置誤差と yaw 誤差に対して P 制御を行う。</li>
+          <li>目標位置と目標 yaw には、それぞれ許容マージンを設定できる。</li>
+          <li>ゲイン、最大速度、最小速度、tolerance を実機チューニングできる。</li>
+          <li>センサ timeout または invalid data 時は安全に停止する。</li>
+        </ol>
+      </section>
+
+      <section id="io">
+        <h2>4-5. Topic I/O</h2>
+        <div class="summary-grid">
+          <div class="summary-item">
+            <span class="summary-label">Subscribe</span>
+            <span class="summary-value"><code>/uwb/position</code></span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Subscribe</span>
+            <span class="summary-value"><code>/zed/heading</code></span>
+          </div>
+          <div class="summary-item">
+            <span class="summary-label">Publish</span>
+            <span class="summary-value"><code>/rov_cmd_vel</code></span>
+          </div>
+        </div>
+
+        <h3>Subscribe Topic</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Topic</th><th>Type</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>/uwb/position</code></td><td><code>uwb_interfaces/msg/UwbPosition</code></td><td>UWB によるロボット 2D 位置を受け取る</td></tr>
+              <tr><td><code>/zed/heading</code></td><td><code>zed_interfaces/msg/ZedHeading</code></td><td>ZED2i によるロボット yaw を受け取る</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>使用フィールド</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Topic</th><th>Field</th><th>Type</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>/uwb/position</code></td><td><code>x_m</code></td><td><code>float32</code></td><td>ロボット現在位置 x [m]</td></tr>
+              <tr><td><code>/uwb/position</code></td><td><code>y_m</code></td><td><code>float32</code></td><td>ロボット現在位置 y [m]</td></tr>
+              <tr><td><code>/uwb/position</code></td><td><code>valid</code></td><td><code>bool</code></td><td>UWB 位置推定が有効か判定する</td></tr>
+              <tr><td><code>/zed/heading</code></td><td><code>robot_yaw_rad</code></td><td><code>float32</code></td><td>ロボット現在 yaw [rad]</td></tr>
+              <tr><td><code>/zed/heading</code></td><td><code>valid</code></td><td><code>bool</code></td><td>heading が有効か判定する</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Publish Topic</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Topic</th><th>Type</th><th>使用フィールド</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><code>/rov_cmd_vel</code></td>
+                <td><code>geometry_msgs/msg/Twist</code></td>
+                <td><code>linear.x</code>, <code>linear.y</code>, <code>angular.z</code></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p><code>linear.z</code>, <code>angular.x</code>, <code>angular.y</code> は使用せず、常に <code>0.0</code> とする。</p>
+      </section>
+
+      <section id="parameters">
+        <h2>6. Parameters</h2>
+        <p>parameter は launch 引数または YAML から変更できること。未指定で起動できる default 値を持たせる。</p>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Parameter</th><th>Type</th><th>Default</th><th>Range / Constraint</th><th>用途</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>uwb_position_topic</code></td><td><code>string</code></td><td><code>/uwb/position</code></td><td>non-empty</td><td>subscribe する UWB 位置 topic</td></tr>
+              <tr><td><code>zed_heading_topic</code></td><td><code>string</code></td><td><code>/zed/heading</code></td><td>non-empty</td><td>subscribe する ZED heading topic</td></tr>
+              <tr><td><code>cmd_vel_topic</code></td><td><code>string</code></td><td><code>/rov_cmd_vel</code></td><td>non-empty</td><td>publish する速度指令 topic</td></tr>
+              <tr><td><code>target_x</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite</td><td>目標 x 位置 [m]</td></tr>
+              <tr><td><code>target_y</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite</td><td>目標 y 位置 [m]</td></tr>
+              <tr><td><code>target_yaw</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite rad</td><td>目標 yaw [rad]</td></tr>
+              <tr><td><code>x_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>x 方向の停止許容誤差 [m]</td></tr>
+              <tr><td><code>y_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>y 方向の停止許容誤差 [m]</td></tr>
+              <tr><td><code>yaw_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>yaw の停止許容誤差 [rad]</td></tr>
+              <tr><td><code>kp_x</code></td><td><code>float</code></td><td><code>0.4</code></td><td><code>&gt;= 0.0</code></td><td>x 方向 P ゲイン</td></tr>
+              <tr><td><code>kp_y</code></td><td><code>float</code></td><td><code>0.4</code></td><td><code>&gt;= 0.0</code></td><td>y 方向 P ゲイン</td></tr>
+              <tr><td><code>kp_yaw</code></td><td><code>float</code></td><td><code>0.8</code></td><td><code>&gt;= 0.0</code></td><td>yaw P ゲイン</td></tr>
+              <tr><td><code>min_linear_speed</code></td><td><code>float</code></td><td><code>0.0</code></td><td><code>0.0 &lt;= min_linear_speed &lt;= max_linear_speed</code></td><td>並進方向の最小速度指令</td></tr>
+              <tr><td><code>max_linear_speed</code></td><td><code>float</code></td><td><code>0.5</code></td><td><code>&gt;= 0.0</code></td><td>並進方向の最大速度指令</td></tr>
+              <tr><td><code>min_angular_speed</code></td><td><code>float</code></td><td><code>0.0</code></td><td><code>0.0 &lt;= min_angular_speed &lt;= max_angular_speed</code></td><td>yaw の最小角速度指令</td></tr>
+              <tr><td><code>max_angular_speed</code></td><td><code>float</code></td><td><code>0.5</code></td><td><code>&gt;= 0.0</code></td><td>yaw 角速度の最大値</td></tr>
+              <tr><td><code>position_timeout</code></td><td><code>float</code></td><td><code>0.5</code></td><td><code>&gt; 0.0</code></td><td>UWB 位置の timeout [s]</td></tr>
+              <tr><td><code>heading_timeout</code></td><td><code>float</code></td><td><code>0.5</code></td><td><code>&gt; 0.0</code></td><td>ZED heading の timeout [s]</td></tr>
+              <tr><td><code>control_rate</code></td><td><code>float</code></td><td><code>20.0</code></td><td><code>&gt; 0.0</code></td><td>制御周期 [Hz]</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>許容マージン要求</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Requirement</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>MR-001</td><td><code>abs(target_x - current_x) &lt;= x_tolerance</code> の場合、x 方向の速度指令を <code>0.0</code> とすること。</td></tr>
+              <tr><td>MR-002</td><td><code>abs(target_y - current_y) &lt;= y_tolerance</code> の場合、y 方向の速度指令を <code>0.0</code> とすること。</td></tr>
+              <tr><td>MR-003</td><td><code>abs(wrap_pi(target_yaw - current_yaw)) &lt;= yaw_tolerance</code> の場合、yaw 角速度指令を <code>0.0</code> とすること。</td></tr>
+              <tr><td>MR-004</td><td><code>x_tolerance</code>, <code>y_tolerance</code>, <code>yaw_tolerance</code> は実機の UWB / heading ノイズより小さすぎない値に調整できること。</td></tr>
+              <tr><td>MR-005</td><td>目標 pose 到達判定は、位置と yaw の全 tolerance を同時に満たした場合のみ true とすること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="control">
+        <h2>7. Control Strategy</h2>
+        <h3>座標と誤差定義</h3>
+        <p>
+          UWB の <code>x_m</code>, <code>y_m</code> は world / anchor 座標系上のロボット位置として扱う。
+          速度指令はロボット座標系の <code>linear.x</code>, <code>linear.y</code> として publish するため、world 座標系の位置誤差を現在 yaw でロボット座標系へ変換して制御する。
+        </p>
+        <p>
+          yaw は ZED heading publisher と同じく、左旋回時に増加する向きを正方向とする。
+          <code>angular.z &gt; 0.0</code> は反時計回り、<code>angular.z &lt; 0.0</code> は時計回りの回転指令として扱う。
+        </p>
+        <p>
+          角度誤差は <code>wrap_pi(target_yaw - current_yaw)</code> で計算し、正規化範囲は <code>[-pi, pi)</code> とする。
+          これにより、目標 yaw と現在 yaw の差がちょうど 180 deg の場合は <code>-pi</code> として扱い、時計回りに回転する。
+        </p>
+        <pre><code>raw_error_world_x = target_x - current_x
+raw_error_world_y = target_y - current_y
+yaw_error = wrap_pi(target_yaw - current_yaw)
+
+error_world_x = 0.0 if abs(raw_error_world_x) &lt;= x_tolerance else raw_error_world_x
+error_world_y = 0.0 if abs(raw_error_world_y) &lt;= y_tolerance else raw_error_world_y
+
+error_body_x =  cos(current_yaw) * error_world_x + sin(current_yaw) * error_world_y
+error_body_y = -sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y</code></pre>
+        <div class="callout warn">
+          <code>error_body_x</code> はロボット前方を正とする。<code>error_body_y</code> の正方向は、実装前に <code>locomotion_core/rover_velocity</code> の実機座標定義と合わせる。
+        </div>
+
+        <h3>P 制御</h3>
+        <pre><code>cmd.linear.x = kp_x * error_body_x
+cmd.linear.y = kp_y * error_body_y
+cmd.angular.z = kp_yaw * yaw_error</code></pre>
+        <p>
+          yaw 制御では、<code>yaw_error &gt; 0.0</code> の場合に反時計回り、<code>yaw_error &lt; 0.0</code> の場合に時計回りへ回転する。
+        </p>
+        <p>
+          tolerance 内の world 座標系誤差は個別に <code>0.0</code> としてから、body 座標系へ変換する。
+          yaw が <code>yaw_tolerance</code> 内の場合は <code>cmd.angular.z = 0.0</code> とする。
+        </p>
+
+        <h3>速度制限</h3>
+        <pre><code>cmd.linear.x = clamp(cmd.linear.x, -max_linear_speed, max_linear_speed)
+cmd.linear.y = clamp(cmd.linear.y, -max_linear_speed, max_linear_speed)
+cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed, max_angular_speed)</code></pre>
+        <p>
+          最小速度補償を有効にする場合でも、速度指令の符号は必ず目標方向と一致させる。
+        </p>
+      </section>
+
+      <section id="flow">
+        <h2>8. State Machine / Control Flow</h2>
+        <p>初期仕様では単一状態の pose tracking とする。</p>
+        <pre><code>TRACKING</code></pre>
+        <h3>TRACKING 到達条件</h3>
+        <pre><code>recent_position == true
+recent_heading == true
+abs(target_x - current_x) &lt;= x_tolerance
+abs(target_y - current_y) &lt;= y_tolerance
+abs(wrap_pi(target_yaw - current_yaw)) &lt;= yaw_tolerance</code></pre>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Requirement</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>CF-001</td><td>UWB 位置と ZED heading の両方が recent かつ valid の場合のみ制御を行うこと。</td></tr>
+              <tr><td>CF-002</td><td>到達条件を満たした場合、<code>/rov_cmd_vel</code> に zero velocity を publish し続けること。</td></tr>
+              <tr><td>CF-003</td><td>tolerance 外では、P 制御により目標方向へ速度指令を出すこと。</td></tr>
+              <tr><td>CF-004</td><td>位置制御と yaw 制御は独立に計算し、同時に指令できること。</td></tr>
+              <tr><td>CF-005</td><td>目標近傍で速度指令が反転し続ける状態は、tolerance、最小速度、最大速度、ゲイン調整で抑制できること。</td></tr>
+              <tr><td>CF-006</td><td><code>target_yaw == 0 deg</code>, <code>current_yaw == 180 deg</code> のように yaw 誤差がちょうど 180 deg の場合は、<code>yaw_error = -pi</code> として時計回りに回転すること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="failure">
+        <h2>9. Failure Cases</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Failure Case</th><th>Required Behavior</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>FC-001</td><td><code>/uwb/position</code> が未受信</td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-002</td><td><code>/zed/heading</code> が未受信</td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-003</td><td><code>/uwb/position</code> の <code>valid == false</code></td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-004</td><td><code>/zed/heading</code> の <code>valid == false</code></td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-005</td><td><code>position_timeout</code> を超えて UWB 位置が更新されない</td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-006</td><td><code>heading_timeout</code> を超えて ZED heading が更新されない</td><td>zero velocity を publish する</td></tr>
+              <tr><td>FC-007</td><td>parameter validation に失敗する</td><td>起動時に error とし、制御を開始しない</td></tr>
+              <tr><td>FC-008</td><td>UWB 位置または yaw が finite value でない</td><td>該当サンプルを invalid として扱い、zero velocity を publish する</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="safety">
+        <h2>10. Safety Requirements</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Requirement</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>SR-001</td><td>sensor timeout または invalid data 時は必ず zero velocity を publish すること。</td></tr>
+              <tr><td>SR-002</td><td><code>linear.x</code> と <code>linear.y</code> は <code>[-max_linear_speed, max_linear_speed]</code> に制限すること。</td></tr>
+              <tr><td>SR-003</td><td><code>angular.z</code> は <code>[-max_angular_speed, max_angular_speed]</code> に制限すること。</td></tr>
+              <tr><td>SR-004</td><td>parameter validation に失敗した状態で制御を開始しないこと。</td></tr>
+              <tr><td>SR-005</td><td>実機試験では外部停止手段を用意した状態で実施すること。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="validation">
+        <h2>11. 実機確認観点</h2>
+        <h3>確認する topic</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Topic</th><th>確認内容</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>/uwb/position</code></td><td><code>x_m</code>, <code>y_m</code>, <code>valid</code> の安定性と目標近傍の揺れ</td></tr>
+              <tr><td><code>/zed/heading</code></td><td><code>robot_yaw_rad</code>, <code>valid</code> の安定性と yaw drift</td></tr>
+              <tr><td><code>/rov_cmd_vel</code></td><td><code>linear.x</code>, <code>linear.y</code>, <code>angular.z</code> の符号、飽和、目標近傍の反転</td></tr>
+              <tr><td><code>rov/motors</code></td><td>速度指令に対する motor command の変化</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>記録する値</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Value</th><th>目的</th></tr>
+            </thead>
+            <tbody>
+              <tr><td><code>current_x</code></td><td>UWB x 位置の確認</td></tr>
+              <tr><td><code>current_y</code></td><td>UWB y 位置の確認</td></tr>
+              <tr><td><code>current_yaw</code></td><td>ZED yaw の確認</td></tr>
+              <tr><td><code>error_world_x</code></td><td>x 方向誤差の確認</td></tr>
+              <tr><td><code>error_world_y</code></td><td>y 方向誤差の確認</td></tr>
+              <tr><td><code>yaw_error</code></td><td>yaw 誤差の確認</td></tr>
+              <tr><td><code>cmd_linear_x</code></td><td>前後速度指令の確認</td></tr>
+              <tr><td><code>cmd_linear_y</code></td><td>横速度指令の確認</td></tr>
+              <tr><td><code>cmd_angular_z</code></td><td>yaw 角速度指令の確認</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>実機テスト条件</h3>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Test</th><th>Pass Condition</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>VT-001</td><td>目標位置から離れた状態で起動する</td><td>目標方向へ <code>linear.x/y</code> が出る</td></tr>
+              <tr><td>VT-002</td><td>目標 yaw と異なる向きで起動する</td><td>目標 yaw へ近づく向きに <code>angular.z</code> が出る</td></tr>
+              <tr><td>VT-003</td><td>位置が <code>x_tolerance/y_tolerance</code> 内に入る</td><td>並進速度指令が <code>0.0</code> になる</td></tr>
+              <tr><td>VT-004</td><td>yaw が <code>yaw_tolerance</code> 内に入る</td><td>yaw 角速度指令が <code>0.0</code> になる</td></tr>
+              <tr><td>VT-005</td><td>UWB position を一時的に止める、または invalid にする</td><td>zero velocity を publish する</td></tr>
+              <tr><td>VT-006</td><td>ZED heading を一時的に止める、または invalid にする</td><td>zero velocity を publish する</td></tr>
+              <tr><td>VT-007</td><td>tolerance を広げて目標近傍の挙動を確認する</td><td><code>/rov_cmd_vel</code> の短周期反転が減る</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="tbd">
+        <h2>12. 未決事項</h2>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>ID</th><th>Item</th><th>Memo</th></tr>
+            </thead>
+            <tbody>
+              <tr><td>TBD-002</td><td><code>linear.y</code> の正方向</td><td><code>locomotion_core/rover_velocity</code> の実機座標定義と合わせる</td></tr>
+              <tr><td>TBD-003</td><td>UWB 座標系と ZED yaw のゼロ方向</td><td>anchor 座標系の x/y と <code>robot_yaw_rad == 0</code> の方向を実機で合わせる</td></tr>
+              <tr><td>TBD-004</td><td>UWB 位置の平滑化</td><td>初期仕様では controller 内平滑化なし。必要なら移動平均 parameter を追加する</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <aside class="toc" aria-label="目次">
+      <p class="toc-title">目次</p>
+      <a href="#purpose">1. 目的</a>
+      <a href="#target-node">2. 対象ノード</a>
+      <a href="#overview">3. ノードの目的</a>
+      <a href="#io">4-5. Topic I/O</a>
+      <a href="#parameters">6. Parameters</a>
+      <a href="#control">7. Control Strategy</a>
+      <a href="#flow">8. Control Flow</a>
+      <a href="#failure">9. Failure Cases</a>
+      <a href="#safety">10. Safety</a>
+      <a href="#validation">11. 実機確認</a>
+      <a href="#tbd">12. 未決事項</a>
+    </aside>
+  </div>
+
+  <footer>
+    Source: <code>uwb_position_zed_pose_ctrl_requirements_ja.md</code>
+  </footer>
+</body>
+</html>
