@@ -115,7 +115,7 @@ parameter は launch 引数または YAML から変更できること。未指�
 
 ### 7.1 座標と誤差定義
 
-UWB の `x_m`, `y_m` は world / anchor 座標系上のロボット位置として扱う。速度指令はロボット座標系の `linear.x`, `linear.y` として publish するため、world 座標系の位置誤差を現在 yaw でロボット座標系へ変換して制御する。
+UWB の `x_m`, `y_m` は world / anchor 座標系上のロボット位置として扱う。`robot_yaw_rad == 0.0` のとき、ロボット前方は UWB/world 座標系の `+y` 方向とする。速度指令はロボット座標系の `linear.x`, `linear.y` として publish するため、world 座標系の位置誤差を現在 yaw でロボット座標系へ変換して制御する。
 
 yaw は ZED heading publisher と同じく、左旋回時に増加する向きを正方向とする。`angular.z > 0.0` は反時計回り、`angular.z < 0.0` は時計回りの回転指令として扱う。
 
@@ -129,11 +129,11 @@ yaw_error = wrap_pi(target_yaw - current_yaw)
 error_world_x = 0.0 if abs(raw_error_world_x) <= x_tolerance else raw_error_world_x
 error_world_y = 0.0 if abs(raw_error_world_y) <= y_tolerance else raw_error_world_y
 
-error_body_x =  cos(current_yaw) * error_world_x + sin(current_yaw) * error_world_y
-error_body_y = -sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
+error_body_x = sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
+error_body_y = cos(current_yaw) * error_world_x - sin(current_yaw) * error_world_y
 ```
 
-`error_body_x` はロボット前方を正、`error_body_y` はロボット左方向または右方向の定義を実装前に `locomotion_core/rover_velocity` と合わせること。
+`error_body_x` はロボット前方を正とする。`error_body_y` は `robot_yaw_rad == 0.0` のとき UWB/world 座標系の `+x` 方向を正とする。
 
 ### 7.2 P 制御
 
@@ -289,6 +289,6 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 
 | ID | Item | Memo |
 | --- | --- | --- |
-| TBD-002 | `linear.y` の正方向 | `locomotion_core/rover_velocity` の実機座標定義と合わせる |
-| TBD-003 | UWB 座標系と ZED yaw のゼロ方向 | anchor 座標系の x/y と `robot_yaw_rad == 0` の方向を実機で合わせる |
+| TBD-002 | `linear.y` の実機挙動 | `linear.y > 0.0` が UWB/world `+x` 方向へ動くことを実機で確認する |
+| TBD-003 | UWB 座標系と ZED yaw のゼロ方向 | `robot_yaw_rad == 0` の方向を UWB/world `+y` として実機で合わせる |
 | TBD-004 | UWB 位置の平滑化 | 初期仕様では controller 内平滑化なし。必要なら移動平均 parameter を追加する |

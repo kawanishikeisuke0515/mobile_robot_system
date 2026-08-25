@@ -1,6 +1,6 @@
 uwb_distance_publisher:
   ros__parameters:
-    serial_port: "/dev/ttyACM2"
+    serial_port: "/dev/ttyACM1"
     baudrate: 115200
     read_timeout: 0.1
     reconnect_interval: 1.0

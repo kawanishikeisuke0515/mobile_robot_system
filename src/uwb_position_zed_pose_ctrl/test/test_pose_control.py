@@ -65,10 +65,38 @@ def test_world_error_is_rotated_to_body_frame():
         config=default_config(target_x=1.0, max_linear_speed=10.0),
     )
 
+    assert result.debug.error_body_x == 1.0
+    assert abs(result.debug.error_body_y) < 1.0e-9
+    assert result.linear_x == 1.0
+    assert abs(result.linear_y) < 1.0e-9
+
+
+def test_yaw_zero_world_positive_y_is_forward():
+    result = calculate_pose_command(
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=0.0,
+        config=default_config(target_y=1.0, max_linear_speed=10.0),
+    )
+
+    assert result.debug.error_body_x == 1.0
+    assert abs(result.debug.error_body_y) < 1.0e-9
+    assert result.linear_x == 1.0
+    assert abs(result.linear_y) < 1.0e-9
+
+
+def test_yaw_zero_world_positive_x_is_lateral_positive():
+    result = calculate_pose_command(
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=0.0,
+        config=default_config(target_x=1.0, max_linear_speed=10.0),
+    )
+
     assert abs(result.debug.error_body_x) < 1.0e-9
-    assert result.debug.error_body_y == -1.0
+    assert result.debug.error_body_y == 1.0
     assert abs(result.linear_x) < 1.0e-9
-    assert result.linear_y == -1.0
+    assert result.linear_y == 1.0
 
 
 def test_min_speed_preserves_command_sign():
@@ -77,7 +105,7 @@ def test_min_speed_preserves_command_sign():
         current_y=0.0,
         current_yaw=0.0,
         config=default_config(
-            target_x=-0.2,
+            target_y=-0.2,
             kp_x=0.1,
             min_linear_speed=0.05,
             max_linear_speed=1.0,

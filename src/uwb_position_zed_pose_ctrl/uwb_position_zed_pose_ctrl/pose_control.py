@@ -88,8 +88,8 @@ def calculate_pose_command(
 
     cos_yaw = math.cos(current_yaw)
     sin_yaw = math.sin(current_yaw)
-    error_body_x = cos_yaw * error_world_x + sin_yaw * error_world_y
-    error_body_y = -sin_yaw * error_world_x + cos_yaw * error_world_y
+    error_body_x = sin_yaw * error_world_x + cos_yaw * error_world_y
+    error_body_y = cos_yaw * error_world_x - sin_yaw * error_world_y
 
     linear_x = config.kp_x * error_body_x
     linear_y = config.kp_y * error_body_y

@@ -4,8 +4,8 @@ uwb_position_zed_pose_ctrl:
     zed_heading_topic: /zed/heading
     cmd_vel_topic: /rov_cmd_vel
 
-    target_x: 0.0
-    target_y: 0.0
+    target_x: -1.0
+    target_y: -1.0
     target_yaw: 0.0
 
     x_tolerance: 0.05
