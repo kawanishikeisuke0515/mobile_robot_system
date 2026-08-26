@@ -1,11 +1,6 @@
 uwb_distance_publisher:
   ros__parameters:
-    serial_port: "/dev/ttyACM1"
-    serial_port_candidates:
-      - "/dev/ttyACM1"
-      - "/dev/ttyACM2"
-      - "/dev/ttyACM0"
-    serial_probe_lines: 5
+    serial_port: "/dev/serial/by-id/usb-Arduino_Stella_DA6CCE29E172D7E7-if00"
     baudrate: 115200
     read_timeout: 0.1
     reconnect_interval: 1.0

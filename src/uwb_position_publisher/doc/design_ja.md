@@ -120,8 +120,6 @@ executable: uwb_position_logger
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
 | `serial_port` | string | `/dev/ttyACM1` | Arduino のシリアルデバイスパス |
-| `serial_port_candidates` | string array | `[]` | `serial_port` を開けない場合に順番に試すシリアルデバイスパス |
-| `serial_probe_lines` | int | `5` | 候補ポート採用前に UWB CSV として読めるか確認する最大行数 |
 | `baudrate` | int | `115200` | シリアル通信速度 |
 | `read_timeout` | double | `0.1` | 1 回の read timeout [s] |
 | `reconnect_interval` | double | `1.0` | 再接続試行間隔 [s] |
@@ -155,7 +153,7 @@ executable: uwb_position_logger
 | `uwb_distances_topic` | string | `/uwb/distances` | subscribe する UWB 距離 topic |
 | `flush_every_rows` | int | `20` | CSV を flush する行数間隔 |
 
-実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。USB 接続順で `/dev/ttyACM*` が変わる場合は、`serial_port_candidates` に複数候補を指定する。複数の USB シリアル機器がある場合、候補ポートは UWB CSV として parse できる行を受信できた場合のみ採用する。
+実運用では USB 接続順による `/dev/ttyACM*` の番号変化を避けるため、`serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。
 
 安定デバイス名は以下で確認する。
 
@@ -508,12 +506,7 @@ anchor_3_valid: false
 ```yaml
 uwb_distance_publisher:
   ros__parameters:
-    serial_port: "/dev/ttyACM1"
-    serial_port_candidates:
-      - "/dev/ttyACM1"
-      - "/dev/ttyACM2"
-      - "/dev/ttyACM0"
-    serial_probe_lines: 5
+    serial_port: "/dev/serial/by-id/usb-Arduino_Stella_DA6CCE29E172D7E7-if00"
     baudrate: 115200
     read_timeout: 0.1
     reconnect_interval: 1.0
@@ -556,7 +549,7 @@ ros2 launch uwb_position_publisher uwb_distance_publisher.launch.py
 
 ```bash
 ros2 run uwb_position_publisher uwb_distance_publisher --ros-args \
-  -p serial_port:=/dev/ttyACM1 \
+  -p serial_port:=/dev/serial/by-id/usb-Arduino_Stella_DA6CCE29E172D7E7-if00 \
   -p baudrate:=115200
 
 ros2 run uwb_position_publisher uwb_position_publisher --ros-args \
@@ -599,7 +592,7 @@ CSV parse と message 変換はシリアル実機なしでテストできるよ�
 
 ```bash
 ros2 run uwb_position_publisher uwb_distance_publisher --ros-args \
-  -p serial_port:=/dev/ttyACM2
+  -p serial_port:=/dev/serial/by-id/usb-Arduino_Stella_DA6CCE29E172D7E7-if00
 ```
 
 確認:
