@@ -1,6 +1,7 @@
 import math
 import os
 from dataclasses import dataclass
+from glob import glob
 from typing import Optional
 from typing import Sequence
 from typing import Tuple
@@ -106,6 +107,8 @@ class UwbDistancePublisher(Node):
         super().__init__('uwb_distance_publisher')
 
         self.declare_parameter('serial_port', '/dev/ttyACM1')
+        self.declare_parameter('serial_port_candidates', [])
+        self.declare_parameter('serial_probe_lines', 5)
         self.declare_parameter('baudrate', 115200)
         self.declare_parameter('read_timeout', 0.1)
         self.declare_parameter('reconnect_interval', 1.0)
@@ -114,9 +117,18 @@ class UwbDistancePublisher(Node):
         self.declare_parameter('timer_period', 0.01)
 
         self.serial_port = str(self.get_parameter('serial_port').value)
+        self.serial_port_candidates = [
+            str(port)
+            for port in self.get_parameter('serial_port_candidates').value
+        ]
+        self.serial_probe_lines = int(
+            self.get_parameter('serial_probe_lines').value
+        )
         self.baudrate = int(self.get_parameter('baudrate').value)
         self.read_timeout = float(self.get_parameter('read_timeout').value)
-        self.reconnect_interval = float(self.get_parameter('reconnect_interval').value)
+        self.reconnect_interval = float(
+            self.get_parameter('reconnect_interval').value
+        )
         self.invalid_distance_cm = int(
             self.get_parameter('invalid_distance_cm').value
         )
@@ -133,7 +145,8 @@ class UwbDistancePublisher(Node):
 
         self.get_logger().info(
             'serial_port=%s baudrate=%d read_timeout=%.3f '
-            'reconnect_interval=%.3f invalid_distance_cm=%d frame_id=%s'
+            'reconnect_interval=%.3f invalid_distance_cm=%d frame_id=%s '
+            'serial_port_candidates=%s serial_probe_lines=%d'
             % (
                 self.serial_port,
                 self.baudrate,
@@ -141,6 +154,8 @@ class UwbDistancePublisher(Node):
                 self.reconnect_interval,
                 self.invalid_distance_cm,
                 self.frame_id,
+                self.serial_port_candidates,
+                self.serial_probe_lines,
             )
         )
         self.get_logger().info('publishing UWB distances on /uwb/distances')
@@ -154,6 +169,13 @@ class UwbDistancePublisher(Node):
             raise ValueError('reconnect_interval must be greater than 0')
         if self.timer_period <= 0.0:
             raise ValueError('timer_period must be greater than 0')
+        if self.serial_probe_lines <= 0:
+            raise ValueError('serial_probe_lines must be greater than 0')
+        if self.serial_port == '' and not self.serial_port_candidates:
+            raise ValueError(
+                'serial_port must not be empty when '
+                'serial_port_candidates is empty'
+            )
 
     def try_open_serial(self) -> bool:
         self.last_reconnect_attempt_time = self.get_clock().now()
@@ -163,23 +185,80 @@ class UwbDistancePublisher(Node):
             )
             return False
 
-        try:
-            self.serial_connection = serial.Serial(
-                port=self.serial_port,
-                baudrate=self.baudrate,
-                timeout=self.read_timeout,
-            )
-        except SerialException as exc:
-            self.serial_connection = None
-            self.get_logger().warn(
-                f'failed to open serial port {self.serial_port}: {exc}'
-            )
-            return False
+        for port in self._serial_ports_to_try():
+            try:
+                self.serial_connection = serial.Serial(
+                    port=port,
+                    baudrate=self.baudrate,
+                    timeout=self.read_timeout,
+                )
+            except SerialException as exc:
+                self.serial_connection = None
+                self.get_logger().warn(
+                    f'failed to open serial port {port}: {exc}'
+                )
+                continue
 
-        self.get_logger().info(
-            f'opened serial port {self.serial_port} at {self.baudrate} bps'
+            if not self._port_outputs_uwb_csv(port):
+                self.close_serial()
+                continue
+
+            self.serial_port = port
+            self.get_logger().info(
+                f'opened serial port {self.serial_port} '
+                f'at {self.baudrate} bps'
+            )
+            return True
+
+        self.get_logger().warn(
+            'failed to open any serial port from %s'
+            % self._serial_ports_to_try()
         )
-        return True
+        return False
+
+    def _serial_ports_to_try(self) -> list[str]:
+        ports = []
+        if self.serial_port != '':
+            ports.append(self.serial_port)
+
+        ports.extend(self.serial_port_candidates)
+        ports.extend(sorted(glob('/dev/serial/by-id/*')))
+
+        seen = set()
+        unique_ports = []
+        for port in ports:
+            if port in seen:
+                continue
+            seen.add(port)
+            unique_ports.append(port)
+        return unique_ports
+
+    def _port_outputs_uwb_csv(self, port: str) -> bool:
+        for _ in range(self.serial_probe_lines):
+            try:
+                line = self.serial_connection.readline()
+            except (OSError, SerialException) as exc:
+                self.get_logger().warn(
+                    f'failed to probe serial port {port}: {exc}'
+                )
+                return False
+
+            normalized = normalize_line(line)
+            if normalized == '':
+                continue
+
+            try:
+                parse_uwb_csv(normalized)
+            except UwbParseError:
+                continue
+
+            return True
+
+        self.get_logger().warn(
+            'serial port %s did not output UWB CSV within %d lines'
+            % (port, self.serial_probe_lines)
+        )
+        return False
 
     def close_serial(self):
         if self.serial_connection is None:

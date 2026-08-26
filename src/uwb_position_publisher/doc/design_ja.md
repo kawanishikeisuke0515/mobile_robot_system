@@ -36,11 +36,14 @@ uwb_position_publisher/
     __init__.py
     uwb_distance_publisher.py
     uwb_position_publisher.py
+    uwb_position_logger.py
   launch/
     uwb_distance_publisher.launch.py
+    uwb_position_logger.launch.py
   config/
     uwb_distance_publisher.yaml
     uwb_position_publisher.yaml
+    uwb_position_logger.yaml
   doc/
     requirements_ja.md
     design_ja.md
@@ -75,6 +78,9 @@ executable: uwb_distance_publisher
 
 node name: uwb_position_publisher
 executable: uwb_position_publisher
+
+node name: uwb_position_logger
+executable: uwb_position_logger
 ```
 
 ### 4.2 Responsibilities
@@ -100,13 +106,22 @@ executable: uwb_position_publisher
 5. `UwbPosition` メッセージ生成
 6. `/uwb/position` への publish
 
+`uwb_position_logger` は以下を担当する。
+
+1. `/uwb/position` の subscribe
+2. CSV ファイルの作成
+3. 受信した `UwbPosition` 1 message ごとの CSV 行保存
+4. 一定行数ごとの flush
+
 ## 5. パラメータ設計
 
 ### 5.1 `uwb_distance_publisher`
 
 | Parameter | Type | Default | Description |
 | --- | --- | --- | --- |
-| `serial_port` | string | `/dev/ttyACM2` | Arduino のシリアルデバイスパス |
+| `serial_port` | string | `/dev/ttyACM1` | Arduino のシリアルデバイスパス |
+| `serial_port_candidates` | string array | `[]` | `serial_port` を開けない場合に順番に試すシリアルデバイスパス |
+| `serial_probe_lines` | int | `5` | 候補ポート採用前に UWB CSV として読めるか確認する最大行数 |
 | `baudrate` | int | `115200` | シリアル通信速度 |
 | `read_timeout` | double | `0.1` | 1 回の read timeout [s] |
 | `reconnect_interval` | double | `1.0` | 再接続試行間隔 [s] |
@@ -127,8 +142,25 @@ executable: uwb_position_publisher
 | `anchor_3_x` | double | `0.0` | アンカー 3 の x 座標 [m] |
 | `anchor_3_y` | double | `1.0` | アンカー 3 の y 座標 [m] |
 | `min_anchor_determinant` | double | `1.0e-9` | アンカー配置の特異判定しきい値 |
+| `moving_average_window` | int | `5` | `/uwb/position` の `x_m`, `y_m` に適用する移動平均サンプル数 |
+| `max_position_jump_m` | double | `1.0` | 前回フィルタ済み位置からこの距離 [m] を超えて飛んだ valid サンプルを移動平均に入れず、直前のフィルタ済み位置を保持する。`0.0` 以下で無効 |
+| `filter_reset_on_invalid` | bool | `true` | invalid サンプル受信時に移動平均バッファをリセットする |
 
-実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。
+### 5.3 `uwb_position_logger`
+
+| Parameter | Type | Default | Description |
+| --- | --- | --- | --- |
+| `output_dir` | string | `/tmp/uwb_position_logs` | CSV 保存先ディレクトリ |
+| `uwb_position_topic` | string | `/uwb/position` | subscribe する UWB 位置 topic |
+| `flush_every_rows` | int | `20` | CSV を flush する行数間隔 |
+
+実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。USB 接続順で `/dev/ttyACM*` が変わる場合は、`serial_port_candidates` に複数候補を指定する。複数の USB シリアル機器がある場合、候補ポートは UWB CSV として parse できる行を受信できた場合のみ採用する。
+
+安定デバイス名は以下で確認する。
+
+```bash
+ls -l /dev/serial/by-id/
+```
 
 ## 6. 入力設計
 
@@ -275,7 +307,26 @@ bool valid
 
 距離が無効、または 3 点測位を解けない場合は `valid = false` とし、`x_m`, `y_m` は `NaN` とする。
 
-### 8.4 Header
+### 8.4 Position Log CSV
+
+`uwb_position_logger` は `/uwb/position` を 1 message 受信するたびに 1 行保存する。
+
+```text
+uwb_position_log_<timestamp>.csv
+```
+
+CSV columns:
+
+```text
+elapsed_sec,
+position_stamp_sec,
+device_time_ms,
+x_m,
+y_m,
+valid
+```
+
+### 8.5 Header
 
 ```text
 header.stamp: ROS 2 ノードが行を受信し、publish メッセージを生成した時刻
@@ -447,7 +498,12 @@ anchor_3_valid: false
 ```yaml
 uwb_distance_publisher:
   ros__parameters:
-    serial_port: "/dev/ttyACM2"
+    serial_port: "/dev/ttyACM1"
+    serial_port_candidates:
+      - "/dev/ttyACM1"
+      - "/dev/ttyACM2"
+      - "/dev/ttyACM0"
+    serial_probe_lines: 5
     baudrate: 115200
     read_timeout: 0.1
     reconnect_interval: 1.0
@@ -466,6 +522,15 @@ uwb_position_publisher:
     anchor_3_x: 0.0
     anchor_3_y: 1.0
     min_anchor_determinant: 1.0e-9
+    moving_average_window: 5
+    max_position_jump_m: 1.0
+    filter_reset_on_invalid: true
+
+uwb_position_logger:
+  ros__parameters:
+    output_dir: "/tmp/uwb_position_logs"
+    uwb_position_topic: "/uwb/position"
+    flush_every_rows: 20
 ```
 
 ### 14.2 Launch
@@ -480,12 +545,14 @@ ros2 launch uwb_position_publisher uwb_distance_publisher.launch.py
 
 ```bash
 ros2 run uwb_position_publisher uwb_distance_publisher --ros-args \
-  -p serial_port:=/dev/ttyACM2 \
+  -p serial_port:=/dev/ttyACM1 \
   -p baudrate:=115200
 
 ros2 run uwb_position_publisher uwb_position_publisher --ros-args \
   -p uwb_distances_topic:=/uwb/distances \
   -p uwb_position_topic:=/uwb/position
+
+ros2 launch uwb_position_publisher uwb_position_logger.launch.py
 ```
 
 ## 15. テスト設計

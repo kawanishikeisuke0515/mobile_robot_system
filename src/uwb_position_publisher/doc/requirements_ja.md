@@ -35,11 +35,11 @@ Arduino を Jetson に USB 接続し、シリアルポートから CSV 文字列
 デフォルト想定:
 
 ```text
-port: /dev/ttyACM2
+port: /dev/ttyACM1
 baudrate: 115200
 ```
 
-実運用では USB の接続順によるデバイス名変化を避けるため、可能であれば `/dev/serial/by-id/...` を使用する。
+実運用では USB の接続順によるデバイス名変化を避けるため、可能であれば `/dev/serial/by-id/...` を使用する。`/dev/ttyACM*` の番号が変わる場合は、複数候補から接続できること。他の USB シリアル機器がある環境では、候補ポートを開いた後に UWB CSV として parse できる行を受信できた場合のみ採用すること。
 
 ### 4.2 CSV フォーマット
 
@@ -151,7 +151,12 @@ uwb_distance_publisher
 ### 7.2 Parameters
 
 ```text
-serial_port: "/dev/ttyACM2"
+serial_port: "/dev/ttyACM1"
+serial_port_candidates:
+  - "/dev/ttyACM1"
+  - "/dev/ttyACM2"
+  - "/dev/ttyACM0"
+serial_probe_lines: 5
 baudrate: 115200
 read_timeout: 0.1
 reconnect_interval: 1.0

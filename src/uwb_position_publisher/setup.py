@@ -27,6 +27,8 @@ setup(
         'console_scripts': [
             'uwb_distance_publisher = uwb_position_publisher.uwb_distance_publisher:main',
             'uwb_position_publisher = uwb_position_publisher.uwb_position_publisher:main',
+            'uwb_position_logger = '
+            'uwb_position_publisher.uwb_position_logger:main',
             'uwb_optitrack_logger = uwb_position_publisher.uwb_optitrack_logger:main',
         ],
     },
