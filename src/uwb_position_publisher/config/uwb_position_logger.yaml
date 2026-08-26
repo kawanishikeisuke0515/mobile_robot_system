@@ -2,4 +2,5 @@ uwb_position_logger:
   ros__parameters:
     output_dir: "/tmp/uwb_position_logs"
     uwb_position_topic: "/uwb/position"
+    uwb_distances_topic: "/uwb/distances"
     flush_every_rows: 20

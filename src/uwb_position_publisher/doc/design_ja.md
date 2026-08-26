@@ -152,6 +152,7 @@ executable: uwb_position_logger
 | --- | --- | --- | --- |
 | `output_dir` | string | `/tmp/uwb_position_logs` | CSV 保存先ディレクトリ |
 | `uwb_position_topic` | string | `/uwb/position` | subscribe する UWB 位置 topic |
+| `uwb_distances_topic` | string | `/uwb/distances` | subscribe する UWB 距離 topic |
 | `flush_every_rows` | int | `20` | CSV を flush する行数間隔 |
 
 実運用では `serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。USB 接続順で `/dev/ttyACM*` が変わる場合は、`serial_port_candidates` に複数候補を指定する。複数の USB シリアル機器がある場合、候補ポートは UWB CSV として parse できる行を受信できた場合のみ採用する。
@@ -309,7 +310,7 @@ bool valid
 
 ### 8.4 Position Log CSV
 
-`uwb_position_logger` は `/uwb/position` を 1 message 受信するたびに 1 行保存する。
+`uwb_position_logger` は `/uwb/position` を 1 message 受信するたびに、最新の `/uwb/distances` と合わせて 1 行保存する。`/uwb/distances` が未受信の場合、距離列は空文字列とする。
 
 ```text
 uwb_position_log_<timestamp>.csv
@@ -323,7 +324,16 @@ position_stamp_sec,
 device_time_ms,
 x_m,
 y_m,
-valid
+valid,
+distances_stamp_sec,
+distances_device_time_ms,
+anchor_1_distance_m,
+anchor_2_distance_m,
+anchor_3_distance_m,
+anchor_1_valid,
+anchor_2_valid,
+anchor_3_valid,
+raw_line
 ```
 
 ### 8.5 Header
@@ -530,6 +540,7 @@ uwb_position_logger:
   ros__parameters:
     output_dir: "/tmp/uwb_position_logs"
     uwb_position_topic: "/uwb/position"
+    uwb_distances_topic: "/uwb/distances"
     flush_every_rows: 20
 ```
 
