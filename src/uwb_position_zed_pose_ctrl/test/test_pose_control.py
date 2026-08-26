@@ -57,7 +57,21 @@ def test_target_tolerance_publishes_zero_velocity():
     assert result.angular_z == 0.0
 
 
-def test_world_error_is_rotated_to_body_frame():
+def test_yaw_positive_90_world_negative_x_is_forward():
+    result = calculate_pose_command(
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=math.pi / 2.0,
+        config=default_config(target_x=-1.0, max_linear_speed=10.0),
+    )
+
+    assert result.debug.error_body_x == 1.0
+    assert abs(result.debug.error_body_y) < 1.0e-9
+    assert result.linear_x == 1.0
+    assert abs(result.linear_y) < 1.0e-9
+
+
+def test_yaw_positive_90_world_positive_x_is_backward():
     result = calculate_pose_command(
         current_x=0.0,
         current_y=0.0,
@@ -65,9 +79,9 @@ def test_world_error_is_rotated_to_body_frame():
         config=default_config(target_x=1.0, max_linear_speed=10.0),
     )
 
-    assert result.debug.error_body_x == 1.0
+    assert result.debug.error_body_x == -1.0
     assert abs(result.debug.error_body_y) < 1.0e-9
-    assert result.linear_x == 1.0
+    assert result.linear_x == -1.0
     assert abs(result.linear_y) < 1.0e-9
 
 

@@ -129,8 +129,8 @@ yaw_error = wrap_pi(target_yaw - current_yaw)
 error_world_x = 0.0 if abs(raw_error_world_x) <= x_tolerance else raw_error_world_x
 error_world_y = 0.0 if abs(raw_error_world_y) <= y_tolerance else raw_error_world_y
 
-error_body_x = sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
-error_body_y = cos(current_yaw) * error_world_x - sin(current_yaw) * error_world_y
+error_body_x = -sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
+error_body_y = cos(current_yaw) * error_world_x + sin(current_yaw) * error_world_y
 ```
 
 `error_body_x` はロボット前方を正とする。`error_body_y` は `robot_yaw_rad == 0.0` のとき UWB/world 座標系の `+x` 方向を正とする。
