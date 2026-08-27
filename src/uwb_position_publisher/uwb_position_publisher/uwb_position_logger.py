@@ -8,9 +8,12 @@ from datetime import datetime
 from typing import Optional
 from typing import Sequence
 
+from geometry_msgs.msg import PoseStamped
 import rclpy
 from rclpy.executors import ExternalShutdownException
 from rclpy.node import Node
+from rclpy.qos import QoSProfile
+from rclpy.qos import ReliabilityPolicy
 
 from uwb_interfaces.msg import UwbDistances
 from uwb_interfaces.msg import UwbPosition
@@ -29,6 +32,10 @@ class UwbPositionLogger(Node):
         self.declare_parameter('output_dir', '/tmp/uwb_position_logs')
         self.declare_parameter('uwb_position_topic', '/uwb/position')
         self.declare_parameter('uwb_distances_topic', '/uwb/distances')
+        self.declare_parameter(
+            'optitrack_pose_topic',
+            '/vrpn_mocap/RigidBody_1/pose',
+        )
         self.declare_parameter('flush_every_rows', 20)
 
         self.output_dir = str(self.get_parameter('output_dir').value)
@@ -37,6 +44,9 @@ class UwbPositionLogger(Node):
         )
         self.uwb_distances_topic = str(
             self.get_parameter('uwb_distances_topic').value
+        )
+        self.optitrack_pose_topic = str(
+            self.get_parameter('optitrack_pose_topic').value
         )
         self.flush_every_rows = int(
             self.get_parameter('flush_every_rows').value
@@ -68,11 +78,23 @@ class UwbPositionLogger(Node):
             'anchor_2_valid',
             'anchor_3_valid',
             'raw_line',
+            'optitrack_stamp_sec',
+            'optitrack_x',
+            'optitrack_y',
+            'optitrack_z',
+            'optitrack_qx',
+            'optitrack_qy',
+            'optitrack_qz',
+            'optitrack_qw',
         ])
 
         self.start_time = time.perf_counter()
         self.row_count = 0
         self.latest_distances: Optional[UwbDistances] = None
+        self.latest_optitrack_pose: Optional[PoseStamped] = None
+
+        optitrack_best_effort_qos = QoSProfile(depth=10)
+        optitrack_best_effort_qos.reliability = ReliabilityPolicy.BEST_EFFORT
 
         self.create_subscription(
             UwbDistances,
@@ -86,12 +108,19 @@ class UwbPositionLogger(Node):
             self.uwb_position_callback,
             10,
         )
+        self.create_subscription(
+            PoseStamped,
+            self.optitrack_pose_topic,
+            self.optitrack_pose_callback,
+            optitrack_best_effort_qos,
+        )
 
         self.get_logger().info(
-            'logging %s with latest %s to %s'
+            'logging %s with latest %s and %s to %s'
             % (
                 self.uwb_position_topic,
                 self.uwb_distances_topic,
+                self.optitrack_pose_topic,
                 self.csv_path,
             )
         )
@@ -103,15 +132,31 @@ class UwbPositionLogger(Node):
             raise ValueError('uwb_position_topic must not be empty')
         if self.uwb_distances_topic == '':
             raise ValueError('uwb_distances_topic must not be empty')
+        if self.optitrack_pose_topic == '':
+            raise ValueError('optitrack_pose_topic must not be empty')
         if self.flush_every_rows <= 0:
             raise ValueError('flush_every_rows must be greater than 0')
 
     def uwb_distances_callback(self, msg: UwbDistances):
         self.latest_distances = msg
 
+    def optitrack_pose_callback(self, msg: PoseStamped):
+        self.latest_optitrack_pose = msg
+
     def uwb_position_callback(self, msg: UwbPosition):
         elapsed_sec = time.perf_counter() - self.start_time
         distances = self.latest_distances
+        optitrack_pose = self.latest_optitrack_pose
+        optitrack_position = (
+            optitrack_pose.pose.position
+            if optitrack_pose is not None
+            else None
+        )
+        optitrack_orientation = (
+            optitrack_pose.pose.orientation
+            if optitrack_pose is not None
+            else None
+        )
         self.writer.writerow([
             '%.4f' % elapsed_sec,
             '%.6f' % stamp_to_sec(msg.header.stamp),
@@ -148,6 +193,46 @@ class UwbPositionLogger(Node):
                 distances.anchor_3_valid if distances is not None else None
             ),
             distances.raw_line if distances is not None else '',
+            self._format_stamp(
+                optitrack_pose.header.stamp
+                if optitrack_pose is not None
+                else None
+            ),
+            self._format_float(
+                optitrack_position.x
+                if optitrack_position is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_position.y
+                if optitrack_position is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_position.z
+                if optitrack_position is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_orientation.x
+                if optitrack_orientation is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_orientation.y
+                if optitrack_orientation is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_orientation.z
+                if optitrack_orientation is not None
+                else math.nan
+            ),
+            self._format_float(
+                optitrack_orientation.w
+                if optitrack_orientation is not None
+                else math.nan
+            ),
         ])
 
         self.row_count += 1

@@ -151,6 +151,7 @@ executable: uwb_position_logger
 | `output_dir` | string | `/tmp/uwb_position_logs` | CSV 保存先ディレクトリ |
 | `uwb_position_topic` | string | `/uwb/position` | subscribe する UWB 位置 topic |
 | `uwb_distances_topic` | string | `/uwb/distances` | subscribe する UWB 距離 topic |
+| `optitrack_pose_topic` | string | `/vrpn_mocap/RigidBody_1/pose` | subscribe する OptiTrack pose topic |
 | `flush_every_rows` | int | `20` | CSV を flush する行数間隔 |
 
 実運用では USB 接続順による `/dev/ttyACM*` の番号変化を避けるため、`serial_port` に `/dev/serial/by-id/...` を指定することを推奨する。
@@ -308,7 +309,7 @@ bool valid
 
 ### 8.4 Position Log CSV
 
-`uwb_position_logger` は `/uwb/position` を 1 message 受信するたびに、最新の `/uwb/distances` と合わせて 1 行保存する。`/uwb/distances` が未受信の場合、距離列は空文字列とする。
+`uwb_position_logger` は `/uwb/position` を 1 message 受信するたびに、最新の `/uwb/distances` と最新の OptiTrack pose を合わせて 1 行保存する。`/uwb/distances` または OptiTrack pose が未受信の場合、該当列は空文字列とする。
 
 ```text
 uwb_position_log_<timestamp>.csv
@@ -331,7 +332,15 @@ anchor_3_distance_m,
 anchor_1_valid,
 anchor_2_valid,
 anchor_3_valid,
-raw_line
+raw_line,
+optitrack_stamp_sec,
+optitrack_x,
+optitrack_y,
+optitrack_z,
+optitrack_qx,
+optitrack_qy,
+optitrack_qz,
+optitrack_qw
 ```
 
 ### 8.5 Header
@@ -534,6 +543,7 @@ uwb_position_logger:
     output_dir: "/tmp/uwb_position_logs"
     uwb_position_topic: "/uwb/position"
     uwb_distances_topic: "/uwb/distances"
+    optitrack_pose_topic: "/vrpn_mocap/RigidBody_1/pose"
     flush_every_rows: 20
 ```
 
