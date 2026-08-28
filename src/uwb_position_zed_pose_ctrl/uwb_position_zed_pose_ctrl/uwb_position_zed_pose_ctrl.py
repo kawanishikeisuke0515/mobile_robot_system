@@ -29,7 +29,7 @@ class UwbPositionZedPoseController(Node):
         self.declare_parameter('kp_x', 0.4)
         self.declare_parameter('kp_y', 0.4)
         self.declare_parameter('kp_yaw', 0.8)
-        self.declare_parameter('min_linear_speed', 0.0)
+        self.declare_parameter('min_linear_speed', 0.25)
         self.declare_parameter('max_linear_speed', 0.5)
         self.declare_parameter('min_angular_speed', 0.0)
         self.declare_parameter('max_angular_speed', 0.5)

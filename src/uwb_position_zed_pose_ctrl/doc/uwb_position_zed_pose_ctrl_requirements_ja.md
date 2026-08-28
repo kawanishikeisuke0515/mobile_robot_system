@@ -93,7 +93,7 @@ parameter は launch 引数または YAML から変更できること。未指�
 | `kp_x` | `float` | `0.4` | `>= 0.0` | x 方向 P ゲイン |
 | `kp_y` | `float` | `0.4` | `>= 0.0` | y 方向 P ゲイン |
 | `kp_yaw` | `float` | `0.8` | `>= 0.0` | yaw P ゲイン |
-| `min_linear_speed` | `float` | `0.0` | `0.0 <= min_linear_speed <= max_linear_speed` | 並進方向の最小速度指令 |
+| `min_linear_speed` | `float` | `0.25` | `0.0 <= min_linear_speed <= max_linear_speed` | 並進方向の最小速度指令 |
 | `max_linear_speed` | `float` | `0.5` | `>= 0.0` | 並進方向の最大速度指令 |
 | `min_angular_speed` | `float` | `0.0` | `0.0 <= min_angular_speed <= max_angular_speed` | yaw の最小角速度指令 |
 | `max_angular_speed` | `float` | `0.5` | `>= 0.0` | yaw 角速度の最大値 |
