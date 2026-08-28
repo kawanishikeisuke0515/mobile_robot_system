@@ -22,6 +22,7 @@ def default_config(**overrides):
         'max_linear_speed': 0.5,
         'min_angular_speed': 0.0,
         'max_angular_speed': 0.5,
+        'yaw_linear_gate': 0.0,
     }
     values.update(overrides)
     return PoseControlConfig(**values)
@@ -127,3 +128,22 @@ def test_min_speed_preserves_command_sign():
     )
 
     assert result.linear_x == -0.05
+
+
+def test_yaw_linear_gate_stops_linear_command_when_yaw_error_is_large():
+    result = calculate_pose_command(
+        current_x=0.0,
+        current_y=0.0,
+        current_yaw=0.0,
+        config=default_config(
+            target_y=1.0,
+            target_yaw=math.pi / 2.0,
+            yaw_linear_gate=0.35,
+            max_angular_speed=10.0,
+            max_linear_speed=10.0,
+        ),
+    )
+
+    assert result.linear_x == 0.0
+    assert result.linear_y == 0.0
+    assert result.angular_z > 0.0

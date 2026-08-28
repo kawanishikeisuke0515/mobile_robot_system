@@ -16,6 +16,7 @@ def generate_launch_description():
     kp_yaw = LaunchConfiguration('kp_yaw')
     max_linear_speed = LaunchConfiguration('max_linear_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
+    yaw_linear_gate = LaunchConfiguration('yaw_linear_gate')
     log_positions = LaunchConfiguration('log_positions')
     start_locomotion = LaunchConfiguration('start_locomotion')
 
@@ -87,6 +88,11 @@ def generate_launch_description():
             description='Maximum yaw speed command',
         ),
         DeclareLaunchArgument(
+            'yaw_linear_gate',
+            default_value='0.35',
+            description='Yaw error above this value suppresses linear commands',
+        ),
+        DeclareLaunchArgument(
             'log_positions',
             default_value='true',
             description='Start uwb_position_logger when true',
@@ -133,6 +139,7 @@ def generate_launch_description():
                     'kp_yaw': kp_yaw,
                     'max_linear_speed': max_linear_speed,
                     'max_angular_speed': max_angular_speed,
+                    'yaw_linear_gate': yaw_linear_gate,
                 },
             ],
         ),

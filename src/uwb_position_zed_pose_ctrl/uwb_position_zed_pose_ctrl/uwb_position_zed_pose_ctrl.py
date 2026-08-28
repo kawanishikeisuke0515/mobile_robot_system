@@ -33,6 +33,7 @@ class UwbPositionZedPoseController(Node):
         self.declare_parameter('max_linear_speed', 0.5)
         self.declare_parameter('min_angular_speed', 0.0)
         self.declare_parameter('max_angular_speed', 0.5)
+        self.declare_parameter('yaw_linear_gate', 0.35)
         self.declare_parameter('position_timeout', 0.5)
         self.declare_parameter('heading_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
@@ -54,6 +55,7 @@ class UwbPositionZedPoseController(Node):
             max_linear_speed=float(self.get_parameter('max_linear_speed').value),
             min_angular_speed=float(self.get_parameter('min_angular_speed').value),
             max_angular_speed=float(self.get_parameter('max_angular_speed').value),
+            yaw_linear_gate=float(self.get_parameter('yaw_linear_gate').value),
         )
         self.position_timeout = float(self.get_parameter('position_timeout').value)
         self.heading_timeout = float(self.get_parameter('heading_timeout').value)
@@ -92,7 +94,8 @@ class UwbPositionZedPoseController(Node):
         self.get_logger().info(
             'target=(%.3f, %.3f, %.3f) tolerance=(%.3f, %.3f, %.3f) '
             'kp=(%.3f, %.3f, %.3f) min_speed=(%.3f, %.3f) '
-            'max_speed=(%.3f, %.3f) timeout=(%.3f, %.3f) control_rate=%.1f'
+            'max_speed=(%.3f, %.3f) yaw_linear_gate=%.3f '
+            'timeout=(%.3f, %.3f) control_rate=%.1f'
             % (
                 self.config.target_x,
                 self.config.target_y,
@@ -107,6 +110,7 @@ class UwbPositionZedPoseController(Node):
                 self.config.min_angular_speed,
                 self.config.max_linear_speed,
                 self.config.max_angular_speed,
+                self.config.yaw_linear_gate,
                 self.position_timeout,
                 self.heading_timeout,
                 self.control_rate,
@@ -134,6 +138,7 @@ class UwbPositionZedPoseController(Node):
             self.config.max_linear_speed,
             self.config.min_angular_speed,
             self.config.max_angular_speed,
+            self.config.yaw_linear_gate,
             self.position_timeout,
             self.heading_timeout,
             self.control_rate,
@@ -163,6 +168,8 @@ class UwbPositionZedPoseController(Node):
             raise ValueError('max_angular_speed must be greater than or equal to 0')
         if self.config.min_angular_speed > self.config.max_angular_speed:
             raise ValueError('min_angular_speed must be less than or equal to max_angular_speed')
+        if self.config.yaw_linear_gate < 0.0:
+            raise ValueError('yaw_linear_gate must be greater than or equal to 0')
         if self.position_timeout <= 0.0:
             raise ValueError('position_timeout must be greater than 0')
         if self.heading_timeout <= 0.0:

@@ -97,6 +97,7 @@ parameter は launch 引数または YAML から変更できること。未指�
 | `max_linear_speed` | `float` | `0.5` | `>= 0.0` | 並進方向の最大速度指令 |
 | `min_angular_speed` | `float` | `0.0` | `0.0 <= min_angular_speed <= max_angular_speed` | yaw の最小角速度指令 |
 | `max_angular_speed` | `float` | `0.5` | `>= 0.0` | yaw 角速度の最大値 |
+| `yaw_linear_gate` | `float` | `0.35` | `>= 0.0` | yaw 誤差がこの値 [rad] を超える場合に並進指令を抑制する。`0.0` で無効 |
 | `position_timeout` | `float` | `0.5` | `> 0.0` | UWB 位置の timeout [s] |
 | `heading_timeout` | `float` | `0.5` | `> 0.0` | ZED heading の timeout [s] |
 | `control_rate` | `float` | `20.0` | `> 0.0` | 制御周期 [Hz] |
@@ -146,6 +147,8 @@ cmd.angular.z = kp_yaw * yaw_error
 ```
 
 yaw 制御では、`yaw_error > 0.0` の場合に反時計回り、`yaw_error < 0.0` の場合に時計回りへ回転する。
+
+`yaw_linear_gate > 0.0` かつ `abs(yaw_error) > yaw_linear_gate` の場合、回転と並進の競合を避けるため `cmd.linear.x = 0.0`, `cmd.linear.y = 0.0` とする。
 
 tolerance 内の world 座標系誤差は個別に `0.0` としてから、body 座標系へ変換する。
 

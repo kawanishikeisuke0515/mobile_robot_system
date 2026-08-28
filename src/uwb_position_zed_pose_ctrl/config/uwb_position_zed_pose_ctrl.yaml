@@ -20,6 +20,7 @@ uwb_position_zed_pose_ctrl:
     max_linear_speed: 0.5
     min_angular_speed: 0.0
     max_angular_speed: 0.5
+    yaw_linear_gate: 0.35
 
     position_timeout: 0.5
     heading_timeout: 0.5
