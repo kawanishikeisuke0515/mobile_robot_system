@@ -1,7 +1,7 @@
 # aruco_distance_publisher 要求仕様書
 
-Version: 0.1 draft
-Date: 2026-06-16
+Version: 0.2 draft
+Date: 2026-09-01
 Status: draft
 
 ## 1. 目的
@@ -21,15 +21,22 @@ Status: draft
 
 ## 3. ノードの目的
 
-対象ノードは、ZED2カメラ画像からArUcoマーカーを検出し、OpenCV camera frameにおけるマーカーの相対位置と、画像内の中心誤差を `/aruco/distance` にpublishする。
+対象ノードは、ZED data hub がpublishするZED画像topicをsubscribeし、ArUcoマーカーを検出し、OpenCV camera frameにおけるマーカーの相対位置と、画像内の中心誤差を `/aruco/distance` にpublishする。
 
 本nodeは速度指令を生成しない。ドッキング制御、速度制限、状態遷移、motor command変換は別nodeの責務とする。
 
+移行後、本nodeはZED camera deviceを直接openしない。ZED device accessは `zed_wrapper_data_hub` が起動する公式 `zed_wrapper` に集約する。
+
 ## 4. Subscribe Topic
 
-なし。
+| Topic | Type | 用途 |
+| --- | --- | --- |
+| `/zed2i/zed_node/rgb/color/rect/image` | `sensor_msgs/msg/Image` | ArUco検出に使用するrectified RGB image |
+| `/zed2i/zed_node/rgb/color/rect/camera_info` | `sensor_msgs/msg/CameraInfo` | camera intrinsic parameter取得候補 |
 
-本nodeはROS topicから画像をsubscribeしない。OpenCV `VideoCapture(0)` によりカメラデバイスから画像を取得する。
+topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapper_data_hub` の実機確認済みtopicに合わせる。
+
+`CameraInfo` のsubscribeは初期実装ではdefault有効とする。ZED wrapperのrectified image topicを使うため、対応するCameraInfoを使ってpose推定する。
 
 ## 5. Publish Topic
 
@@ -40,6 +47,7 @@ Status: draft
 ### 5.1 Message Fields
 
 | Field | Type | Requirement |
+| --- | --- | --- |
 | `id` | `int` | 検出したArUco marker IDを格納すること。 |
 | `x` | `float` | OpenCV camera frameの右方向位置[m]を格納すること。 |
 | `y` | `float` | OpenCV camera frameの下方向位置[m]を格納すること。 |
@@ -54,31 +62,40 @@ Status: draft
 ## 6. Parameters
 
 | Parameter | Type | Default | Range / Constraint | 用途 |
-| `camera_side` | `string` | `left` | `left` または `right` | ZED2の左右どちらの画像を使うか選択する |
+| --- | --- | --- | --- | --- |
+| `image_topic` | `string` | `/zed2i/zed_node/rgb/color/rect/image` | non-empty | ArUco検出に使用するimage topic |
+| `camera_info_topic` | `string` | `/zed2i/zed_node/rgb/color/rect/camera_info` | empty or topic name | CameraInfoをsubscribeする場合のtopic |
+| `use_camera_info` | `bool` | `true` | `true` or `false` | calibration fileではなくCameraInfoを使用する |
+| `camera_side` | `string` | `left` | `left` または `right` | calibration file選択用。side-by-side画像分割には使用しない |
 | `marker_length` | `float` | `0.168` | `> 0.0` | ArUcoマーカー一辺の長さ[m] |
 
 ### 6.1 Parameter Requirements
 
 | ID | Requirement |
-| PR-001 | `camera_side` が `left` または `right` 以外の場合、起動時にvalidation errorとすること。 |
-| PR-002 | `marker_length <= 0.0` の場合、起動時にvalidation errorとすること。 |
-| PR-003 | `camera_side` に対応するcamera calibration fileを読み込むこと。 |
-| PR-004 | parameterはlaunch引数またはROS parameterで設定できること。 |
+| --- | --- |
+| PR-001 | `image_topic` が空文字の場合、起動時にvalidation errorとすること。 |
+| PR-002 | `camera_info_topic` は空文字またはtopic名を許容すること。 |
+| PR-003 | `use_camera_info == false` の場合、`camera_side` が `left` または `right` 以外なら起動時にvalidation errorとすること。 |
+| PR-004 | `marker_length <= 0.0` の場合、起動時にvalidation errorとすること。 |
+| PR-005 | `use_camera_info == false` の場合、`camera_side` に対応するcamera calibration fileを読み込むこと。 |
+| PR-006 | `use_camera_info == true` の場合、CameraInfoを受信するまでpose推定を行わないこと。 |
+| PR-007 | parameterはlaunch引数またはROS parameterで設定できること。 |
 
 ## 7. State Machine / Control Flow
 
-本nodeは明示的なstate machineを持たない。timer callbackにより周期的に画像取得、検出、publishを行う。
+本nodeは明示的なstate machineを持たない。image callbackにより画像受信、検出、publishを行う。
 
 ```text
 STARTUP
   -> validate parameters
-  -> load camera calibration
-  -> open camera device
-  -> TIMER_LOOP
+  -> load camera calibration or wait for CameraInfo
+  -> create image subscription
+  -> optional create CameraInfo subscription
+  -> IMAGE_CALLBACK
 
-TIMER_LOOP
-  -> read frame
-  -> split selected camera image
+IMAGE_CALLBACK
+  -> receive image message
+  -> convert ROS image to OpenCV image
   -> convert to grayscale
   -> detect ArUco markers
   -> estimate marker pose
@@ -89,21 +106,29 @@ TIMER_LOOP
 ### 7.1 Startup Requirements
 
 | ID | Requirement |
-| CF-001 | node起動時に `camera_side` と `marker_length` をvalidateすること。 |
-| CF-002 | `camera_side` に対応する calibration fileをsource treeまたはinstall treeから探索すること。 |
-| CF-003 | calibration fileから `cameraMatrix` と `distCoeffs` を読み込むこと。 |
-| CF-004 | camera device 0をOpenCVで開くこと。 |
-| CF-005 | cameraを開けない場合は起動失敗とすること。 |
+| --- | --- |
+| CF-001 | node起動時に `image_topic`, `camera_info_topic`, `use_camera_info`, `camera_side`, `marker_length` をvalidateすること。 |
+| CF-002 | `use_camera_info == false` の場合、`camera_side` に対応する calibration fileをsource treeまたはinstall treeから探索すること。 |
+| CF-003 | `use_camera_info == false` の場合、calibration fileから `cameraMatrix` と `distCoeffs` を読み込むこと。 |
+| CF-004 | `use_camera_info == true` の場合、CameraInfo messageからcamera matrixとdistortion coefficientsを取得すること。 |
+| CF-005 | `image_topic` の `sensor_msgs/msg/Image` subscriptionを作成すること。 |
+| CF-006 | image subscription は sensor data QoS を使用すること。 |
+| CF-007 | `camera_info_topic` が空文字でない場合、`sensor_msgs/msg/CameraInfo` subscriptionを作成できること。 |
+| CF-008 | CameraInfo subscription は sensor data QoS を使用すること。 |
+| CF-009 | ZED camera deviceをOpenCV `VideoCapture(0)` で直接openしないこと。 |
 
 ### 7.2 Detection Loop Requirements
 
 | ID | Requirement |
-| CF-010 | cameraからframeを取得できない場合、その周期ではpublishしないこと。 |
-| CF-011 | ZED2のside-by-side画像から `camera_side` に対応する半分の画像を使用すること。 |
-| CF-012 | ArUco dictionaryは `DICT_5X5_50` を使用すること。 |
-| CF-013 | marker pose推定には `marker_length`、`cameraMatrix`、`distCoeffs` を使用すること。 |
-| CF-014 | markerが検出されない場合、その周期では `/aruco/distance` をpublishしないこと。 |
-| CF-015 | 複数markerが検出された場合、検出された各markerについて `ArucoDistance` をpublishすること。 |
+| --- | --- |
+| CF-010 | image messageを受信した場合のみ検出処理を行うこと。 |
+| CF-011 | ROS image messageをOpenCV imageへ変換すること。 |
+| CF-012 | ZED wrapperのrectified single image topicを入力とし、side-by-side画像分割は行わないこと。 |
+| CF-013 | ArUco dictionaryは `DICT_5X5_50` を使用すること。 |
+| CF-014 | marker pose推定には `marker_length`、`cameraMatrix`、`distCoeffs` を使用すること。 |
+| CF-015 | calibrationが未確定の場合、そのimageではpose推定とpublishを行わないこと。 |
+| CF-016 | markerが検出されない場合、そのimageでは `/aruco/distance` をpublishしないこと。 |
+| CF-017 | 複数markerが検出された場合、検出された各markerについて `ArucoDistance` をpublishすること。 |
 
 ### 7.3 Coordinate Requirements
 
@@ -115,26 +140,32 @@ TIMER_LOOP
 | CR-004 | `z` はcamera前方向を正とすること。 |
 | CR-005 | `normalized_center_error` はmarker中心が画像中心のとき `0.0` とすること。 |
 | CR-006 | `normalized_center_error` はmarker中心が画像右側のとき正、左側のとき負とすること。 |
+| CR-007 | 入力画像がrectified imageの場合、対応するrectified camera calibrationを使用すること。 |
 
 ## 8. Failure Cases
 
 | ID | Failure Case | Required Behavior |
-| FC-001 | `camera_side` が不正 | 起動時にvalidation errorとする |
-| FC-002 | `marker_length <= 0.0` | 起動時にvalidation errorとする |
-| FC-003 | calibration fileが見つからない | 起動失敗とする |
-| FC-004 | calibration fileを読み込めない | 起動失敗とする |
-| FC-005 | camera device 0を開けない | 起動失敗とする |
-| FC-006 | frame取得に失敗 | error logを出し、その周期ではpublishしない |
-| FC-007 | marker未検出 | publishしない |
-| FC-008 | 複数marker検出 | 各markerについてpublishする |
+| --- | --- | --- |
+| FC-001 | `image_topic` が空文字 | 起動時にvalidation errorとする |
+| FC-002 | `camera_side` が不正 | `use_camera_info == false` の場合は起動時にvalidation errorとする |
+| FC-003 | `marker_length <= 0.0` | 起動時にvalidation errorとする |
+| FC-004 | calibration fileが見つからない | `use_camera_info == false` の場合は起動失敗とする |
+| FC-005 | calibration fileを読み込めない | `use_camera_info == false` の場合は起動失敗とする |
+| FC-006 | CameraInfoが未受信 | `use_camera_info == true` の場合はpose推定とpublishを行わない |
+| FC-007 | image message変換に失敗 | warn logを出し、そのimageではpublishしない |
+| FC-008 | marker未検出 | publishしない |
+| FC-009 | 複数marker検出 | 各markerについてpublishする |
+| FC-010 | image topicが途切れる | 古い検出値を再publishしない |
 
 ## 9. Safety Requirements
 
 | ID | Requirement |
+| --- | --- |
 | SR-001 | marker未検出時に古い検出値を再publishしないこと。 |
-| SR-002 | frame取得失敗時に推定値を捏造してpublishしないこと。 |
-| SR-003 | calibration file読み込み失敗時に無補正または不明なcamera parameterでpose推定しないこと。 |
+| SR-002 | image未受信時またはimage変換失敗時に推定値を捏造してpublishしないこと。 |
+| SR-003 | calibration未確定時に無補正または不明なcamera parameterでpose推定しないこと。 |
 | SR-004 | 本nodeは速度指令やmotor commandをpublishしないこと。 |
+| SR-005 | 本nodeはZED camera deviceを直接openしないこと。 |
 
 
 ## 10. 設計仕様書作成時の注意
@@ -145,7 +176,8 @@ AIが設計仕様書を作成する場合、以下を守ること。
 2. 後段controllerの速度制御仕様を本nodeに混ぜない。
 3. `/aruco/distance` のmessage fieldと座標系を明確にする。
 4. marker未検出時に古い値をpublishしない仕様を維持する。
-5. calibration fileとcamera_sideの関係を明記する。
+5. 入力画像topicとcalibration sourceの関係を明記する。
+6. ZED camera device accessは `zed_wrapper_data_hub` 側の責務とし、本nodeには含めない。
 
 ## 11. AIへの依頼文
 

@@ -49,7 +49,7 @@ aruco_distance_publisher
   -> /aruco/distance を publish
 
 zed_heading_publisher
-  -> magnetometer または sensor topic を subscribe
+  -> /zed2i/zed_node/imu/mag を subscribe
   -> hard-iron 補正と yaw 算出
   -> /zed/heading を publish
 
@@ -121,7 +121,8 @@ VIO evaluation:
 4. sensor topic の publish
 5. odometry/pose topic の publish
 6. TF publish
-7. depth、mapping、object detection など追加機能の optional enable
+7. `zed_description` の URDF/xacro を使った camera frame 定義
+8. depth、mapping、object detection など追加機能の optional enable
 
 `zed_wrapper` は `/aruco/distance` や `/zed/heading` を publish しない。
 
@@ -142,7 +143,7 @@ VIO evaluation:
 
 `zed_heading_publisher` は以下を担当する。
 
-1. ZED wrapper の magnetometer または sensor topic を subscribe
+1. ZED wrapper の `/zed2i/zed_node/imu/mag` を subscribe
 2. raw magnetic field の抽出
 3. hard-iron 補正
 4. zero heading 補正
@@ -169,6 +170,36 @@ VIO を利用する controller または fusion node は、公式 wrapper の od
 | VIO pose | `zed_wrapper` pose topic | controller/fusion node | map/world pose estimate |
 | ArUco distance | `/aruco/distance` | controller/logger | marker-relative docking state |
 | ZED heading | `/zed/heading` | controller/logger | corrected robot yaw |
+
+### 6.1 Verified Topics
+
+2026-09-01 時点の実機確認では、`camera_name:=zed2i`、`node_name:=zed_node` で以下の topic が publish された。
+
+| Topic | Intended Use |
+| --- | --- |
+| `/zed2i/zed_node/rgb/color/rect/image` | ArUco detection input |
+| `/zed2i/zed_node/rgb/color/rect/camera_info` | ArUco camera calibration input candidate |
+| `/zed2i/zed_node/rgb/color/rect/image/camera_info` | ArUco camera calibration input candidate |
+| `/zed2i/zed_node/imu/data` | IMU logging or future fusion input |
+| `/zed2i/zed_node/imu/mag` | `zed_heading_publisher` input |
+| `/zed2i/zed_node/odom` | VIO odometry input |
+| `/zed2i/zed_node/pose` | VIO pose input |
+| `/zed2i/zed_node/pose/status` | VIO validity/status input |
+| `/zed2i/zed_node/status/health` | ZED health monitoring |
+| `/zed2i/zed_node/status/heartbeat` | ZED heartbeat monitoring |
+| `/zed2i/joint_states` | ZED description state |
+| `/zed2i/zed2i_description` | ZED robot description |
+
+下流ノード移行時の初期 default topic は以下を候補とする。
+
+```text
+aruco_distance_publisher.image_topic: /zed2i/zed_node/rgb/color/rect/image
+aruco_distance_publisher.camera_info_topic: /zed2i/zed_node/rgb/color/rect/camera_info
+zed_heading_publisher.mag_topic: /zed2i/zed_node/imu/mag
+vio_odom_topic: /zed2i/zed_node/odom
+vio_pose_topic: /zed2i/zed_node/pose
+vio_pose_status_topic: /zed2i/zed_node/pose/status
+```
 
 ## 7. Config Policy
 
@@ -252,6 +283,7 @@ future zed_docking_bringup.launch.py
 | `node_name` | string | `zed_node` | ZED wrapper node name |
 | `serial_number` | string | `0` | Camera serial number |
 | `camera_id` | string | `-1` | Camera device ID |
+| `publish_urdf` | bool | `true` | `zed_description` に基づく robot_state_publisher |
 | `publish_tf` | bool | `true` | odom to camera_link TF |
 | `publish_map_tf` | bool | `true` | map to odom TF |
 | `publish_imu_tf` | bool | `false` | IMU TF |
@@ -264,9 +296,11 @@ future zed_docking_bringup.launch.py
 
 - 本仕様書を追加する。
 - `zed_wrapper_data_hub` package を追加する。
+- `zed_wrapper` と `zed_description` を実行依存として扱う。
 - 公式 `zed_wrapper` の data hub 用 config 方針を決める。
 - `zed_data_hub.launch.py` で公式 `zed_wrapper` を起動する。
 - topic 名と frame_id を実機環境で確認する。
+- 実機確認済み topic を本仕様書に記録する。
 
 ### Phase 1.5: Bringup Package Design
 
@@ -280,12 +314,12 @@ future zed_docking_bringup.launch.py
 - `sensor_msgs/msg/Image` を subscribe する。
 - `cv_bridge` で OpenCV image に変換する。
 - 既存の ArUco 計算処理と `/aruco/distance` publish は維持する。
-- 旧 `VideoCapture(0)` mode は移行期間だけ optional fallback として残すか、別 branch で削除する。
+- 旧 `VideoCapture(0)` direct input は廃止する。
 
 ### Phase 3: Heading Input Migration
 
-- `zed_heading_publisher` に `mag_topic` または `sensor_topic` parameter を追加する。
-- ZED wrapper の magnetometer/sensor topic を subscribe する。
+- `zed_heading_publisher` に `mag_topic` parameter を追加する。
+- ZED wrapper の `/zed2i/zed_node/imu/mag` を subscribe する。
 - 既存の `calculate_heading` と `/zed/heading` publish は維持する。
 - `pyzed.sl.Camera` direct open は廃止する。
 

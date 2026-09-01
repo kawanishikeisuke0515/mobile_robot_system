@@ -5,12 +5,9 @@ from typing import Optional
 
 import rclpy
 from rclpy.node import Node
+from rclpy.qos import qos_profile_sensor_data
+from sensor_msgs.msg import MagneticField
 from zed_interfaces.msg import ZedHeading
-
-try:
-    import pyzed.sl as sl
-except ImportError:
-    sl = None
 
 
 def normalize_to_180(angle_deg: float) -> float:
@@ -63,46 +60,74 @@ def is_finite(*values: float) -> bool:
     return all(math.isfinite(value) for value in values)
 
 
+def get_bool_parameter(value) -> bool:
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in ('true', '1', 'yes', 'on'):
+            return True
+        if normalized in ('false', '0', 'no', 'off'):
+            return False
+    raise ValueError(f'invalid bool parameter value: {value}')
+
+
 class ZedHeadingPublisher(Node):
     def __init__(self):
         super().__init__('zed_heading_publisher')
 
+        self.declare_parameter('mag_topic', '/zed2i/zed_node/imu/mag')
         self.declare_parameter('center_x', -2.5354)
         self.declare_parameter('center_z', -10.3439)
         self.declare_parameter('zero_heading_deg', 40.0)
         self.declare_parameter('publish_rate_hz', 20.0)
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)
+        self.declare_parameter('magnetic_field_scale', 1000000.0)
 
+        self.mag_topic = str(self.get_parameter('mag_topic').value)
         self.center_x = float(self.get_parameter('center_x').value)
         self.center_z = float(self.get_parameter('center_z').value)
         self.zero_heading_deg = float(self.get_parameter('zero_heading_deg').value)
         self.publish_rate_hz = float(self.get_parameter('publish_rate_hz').value)
         self.frame_id = str(self.get_parameter('frame_id').value)
-        self.invert_yaw = bool(self.get_parameter('invert_yaw').value)
+        self.invert_yaw = get_bool_parameter(self.get_parameter('invert_yaw').value)
+        self.magnetic_field_scale = float(
+            self.get_parameter('magnetic_field_scale').value
+        )
         self._validate_parameters()
 
         self.publisher_ = self.create_publisher(ZedHeading, '/zed/heading', 10)
-        self.zed = self._open_zed()
-        self.sensors_data = sl.SensorsData()
         self.last_sensor_warn_time = None
+        self.last_publish_time = None
 
-        self.timer = self.create_timer(1.0 / self.publish_rate_hz, self.timer_callback)
+        self.mag_subscription = self.create_subscription(
+            MagneticField,
+            self.mag_topic,
+            self.mag_callback,
+            qos_profile_sensor_data,
+        )
+
         self.get_logger().info(
-            'center_x=%.5f center_z=%.5f zero_heading_deg=%.5f '
-            'publish_rate_hz=%.3f frame_id=%s invert_yaw=%s'
+            'mag_topic=%s center_x=%.5f center_z=%.5f zero_heading_deg=%.5f '
+            'publish_rate_hz=%.3f frame_id=%s invert_yaw=%s '
+            'magnetic_field_scale=%.5f'
             % (
+                self.mag_topic,
                 self.center_x,
                 self.center_z,
                 self.zero_heading_deg,
                 self.publish_rate_hz,
                 self.frame_id,
                 self.invert_yaw,
+                self.magnetic_field_scale,
             )
         )
         self.get_logger().info('publishing ZED2i heading on /zed/heading')
 
     def _validate_parameters(self):
+        if self.mag_topic == '':
+            raise ValueError('mag_topic must not be empty')
         if not is_finite(self.center_x, self.center_z, self.zero_heading_deg):
             raise ValueError(
                 'center_x, center_z, and zero_heading_deg must be finite values'
@@ -111,39 +136,15 @@ class ZedHeadingPublisher(Node):
             raise ValueError('publish_rate_hz must be a finite value greater than 0')
         if self.frame_id == '':
             raise ValueError('frame_id must not be empty')
+        if not math.isfinite(self.magnetic_field_scale):
+            raise ValueError('magnetic_field_scale must be finite')
 
-    def _open_zed(self):
-        if sl is None:
-            raise RuntimeError('pyzed.sl is not available; install the ZED SDK')
-
-        zed = sl.Camera()
-        init_params = sl.InitParameters()
-        init_params.camera_resolution = sl.RESOLUTION.HD720
-        init_params.camera_fps = 30
-        init_params.depth_mode = sl.DEPTH_MODE.NONE
-
-        err = zed.open(init_params)
-        if err != sl.ERROR_CODE.SUCCESS:
-            raise RuntimeError(f'failed to open ZED2i: {err}')
-        return zed
-
-    def timer_callback(self):
-        err = self.zed.get_sensors_data(
-            self.sensors_data,
-            sl.TIME_REFERENCE.CURRENT,
-        )
-        if err != sl.ERROR_CODE.SUCCESS:
-            self._warn_throttled(f'failed to get ZED sensor data: {err}')
+    def mag_callback(self, msg: MagneticField):
+        if not self._should_publish():
             return
 
-        try:
-            mag = self.sensors_data.get_magnetometer_data()
-            field = mag.get_magnetic_field_uncalibrated()
-            raw_x = float(field[0])
-            raw_z = float(field[2])
-        except Exception as exc:
-            self._warn_throttled(f'failed to read magnetometer data: {exc}')
-            return
+        raw_x = float(msg.magnetic_field.x) * self.magnetic_field_scale
+        raw_z = float(msg.magnetic_field.z) * self.magnetic_field_scale
 
         if not is_finite(raw_x, raw_z):
             self._warn_throttled(
@@ -160,6 +161,15 @@ class ZedHeadingPublisher(Node):
             invert_yaw=self.invert_yaw,
         )
         self.publisher_.publish(self._build_message(sample))
+        self.last_publish_time = self.get_clock().now()
+
+    def _should_publish(self) -> bool:
+        if self.last_publish_time is None:
+            return True
+        elapsed = (
+            self.get_clock().now() - self.last_publish_time
+        ).nanoseconds / 1e9
+        return elapsed >= 1.0 / self.publish_rate_hz
 
     def _build_message(self, sample: HeadingSample) -> ZedHeading:
         msg = ZedHeading()
@@ -184,13 +194,6 @@ class ZedHeadingPublisher(Node):
 
         self.last_sensor_warn_time = now
         self.get_logger().warn(message)
-
-    def destroy_node(self):
-        if hasattr(self, 'zed') and self.zed is not None:
-            self.zed.close()
-            self.zed = None
-        super().destroy_node()
-
 
 def main(args: Optional[list] = None):
     os.environ.setdefault('ROS_AUTOMATIC_DISCOVERY_RANGE', 'LOCALHOST')

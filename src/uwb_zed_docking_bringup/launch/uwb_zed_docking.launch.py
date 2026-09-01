@@ -17,6 +17,7 @@ def generate_launch_description():
     max_linear_speed = LaunchConfiguration('max_linear_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
     yaw_linear_gate = LaunchConfiguration('yaw_linear_gate')
+    mag_topic = LaunchConfiguration('mag_topic')
     log_positions = LaunchConfiguration('log_positions')
     start_locomotion = LaunchConfiguration('start_locomotion')
 
@@ -93,6 +94,11 @@ def generate_launch_description():
             description='Yaw error above this value suppresses linear commands',
         ),
         DeclareLaunchArgument(
+            'mag_topic',
+            default_value='/zed2i/zed_node/imu/mag',
+            description='MagneticField topic published by the ZED data hub',
+        ),
+        DeclareLaunchArgument(
             'log_positions',
             default_value='true',
             description='Start uwb_position_logger when true',
@@ -121,7 +127,12 @@ def generate_launch_description():
             executable='zed_heading_publisher',
             name='zed_heading_publisher',
             output='screen',
-            parameters=[zed_heading_config],
+            parameters=[
+                zed_heading_config,
+                {
+                    'mag_topic': mag_topic,
+                },
+            ],
         ),
         Node(
             package='uwb_position_zed_pose_ctrl',

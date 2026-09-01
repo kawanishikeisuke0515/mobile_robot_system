@@ -24,10 +24,17 @@ source install/setup.bash
 ## Run Distance Publisher
 ```bash
 export ROS_AUTOMATIC_DISCOVERY_RANGE=LOCALHOST
+ros2 launch zed_wrapper_data_hub zed_data_hub.launch.py
 ros2 run aruco_distance_publisher aruco_distance_publisher
 ```
 
-Use the right camera image instead of the default left image:
+Use a different ZED image topic:
+
+```bash
+ros2 run aruco_distance_publisher aruco_distance_publisher --ros-args -p image_topic:=/zed2i/zed_node/rgb/color/rect/image
+```
+
+Use the right calibration file instead of the default left calibration file:
 
 ```bash
 ros2 run aruco_distance_publisher aruco_distance_publisher --ros-args -p camera_side:=right
@@ -79,13 +86,12 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
   - `marker_length`: ArUco marker side length in meters (`0.168` by default)
 
 ## Camera Input
-- Capture source: ZED2 stereo camera
-- OpenCV API: cv2.VideoCapture(0, backend)
-- Preferred backend: cv2.CAP_ANY
-- Fallback backend: cv2.CAP_V4L2
-- The ZED2 frame is treated as side-by-side stereo input.
-- `camera_side=left` uses the left half of the frame.
-- `camera_side=right` uses the right half of the frame.
+- Capture source: `sensor_msgs/msg/Image` from the ZED data hub
+- Default image topic: `/zed2i/zed_node/rgb/color/rect/image`
+- Default camera info topic: `/zed2i/zed_node/rgb/color/rect/camera_info`
+- The ZED camera device is opened only by the official `zed_wrapper`.
+- `use_camera_info=true` uses the ZED wrapper `CameraInfo` calibration by default.
+- `camera_side` selects the calibration file only when `use_camera_info=false`.
 
 ## ROS2 Output
 - Publish topic: /aruco/distance
@@ -140,9 +146,9 @@ During PRE_DOCKING and FINAL_DOCKING, `angular.z` is controlled to keep the mark
 - Default marker length: 0.168 m
 
 ## Processing Flow
-1. Open the ZED2 camera using cv2.VideoCapture(0, backend)
-2. Read frame
-3. Crop the left or right half of the frame based on `camera_side`
+1. Subscribe to the ZED data hub image topic
+2. Convert the ROS image message to an OpenCV image
+3. Load calibration from `.npz`, or use `CameraInfo` when enabled
 4. Convert frame to grayscale
 5. Detect ArUco markers
 6. Estimate pose using cameraMatrix and distCoeffs
@@ -156,6 +162,8 @@ During PRE_DOCKING and FINAL_DOCKING, `angular.z` is controlled to keep the mark
 8. Publish result to ROS2 topic
 
 ## Error Handling
-- If camera open fails: log error and exit
+- If `image_topic` is empty: log error and exit
 - If calibration file not found: log error and exit
+- If `CameraInfo` is enabled but not received: do not publish
+- If image conversion fails: log warning and skip that image
 - If no marker detected: do not publish

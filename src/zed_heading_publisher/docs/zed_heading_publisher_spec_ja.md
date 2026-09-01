@@ -1,23 +1,24 @@
 # ZED Heading Publisher 設計仕様書
 
-Version: 0.1 draft
-Date: 2026-08-21
+Version: 0.2 draft
+Date: 2026-09-01
 Status: draft
 
 ## 1. 概要
 
-`zed_heading_publisher` は、ZED2i の magnetometer から磁場 raw data を取得し、hard-iron 補正とゼロ点補正を行ったうえで、ロボット yaw 角を ROS 2 topic に publish するノードである。
+`zed_heading_publisher` は、ZED data hub が publish する magnetometer topic を subscribe し、hard-iron 補正とゼロ点補正を行ったうえで、ロボット yaw 角を ROS 2 topic に publish するノードである。
 
 本ノードは方位角の算出と publish を担当する。速度指令、自己位置推定、センサフュージョン、地図座標系への変換は本設計の対象外とし、後段ノードで実施する。
 
 ## 2. 設計方針
 
-- ZED2i センサ読み取り、磁場補正、yaw 算出、publish を 1 ノードに閉じる。
+- ZED2i camera device access は `zed_wrapper_data_hub` が起動する公式 `zed_wrapper` に集約する。
+- 本ノードは magnetometer topic の subscribe、磁場補正、yaw 算出、publish を担当する。
 - hard-iron 補正値とゼロ点補正値は ROS parameter として外部から変更できるようにする。
 - 制御で使う角度は `[-pi, pi)` の rad として publish する。
 - 実験時の確認と rosbag 解析のため、raw 磁場値と補正後磁場値も同じ message に含める。
 - 左旋回時に yaw が増加する向きを正方向とする。
-- ZED2i から sensor data を取得できない周期では、古い値を再 publish しない。
+- ZED data hub から magnetometer data を受信できない場合、古い値を再 publish しない。
 
 ## 3. パッケージ構成
 
@@ -78,21 +79,23 @@ zed_interfaces/
 `zed_heading_publisher` は以下を担当する。
 
 1. ROS parameter の宣言、取得、validation
-2. ZED2i camera の open
-3. ZED2i sensor data の周期取得
-4. magnetometer raw field の取得
+2. magnetometer topic の subscribe
+3. magnetometer raw field の取得
 5. X-Z 平面の hard-iron 補正
 6. 磁気角 `magnetic_heading_deg` の算出
 7. ロボット yaw `robot_yaw_deg`, `robot_yaw_rad` の算出
 8. `zed_interfaces/msg/ZedHeading` の生成
 9. `/zed/heading` への publish
-10. 終了時の ZED2i close
 
 ## 5. Subscribe Topic
 
-なし。
+| Topic | Type | 用途 |
+| --- | --- | --- |
+| `/zed2i/zed_node/imu/mag` | `sensor_msgs/msg/MagneticField` | ZED wrapper が publish する magnetometer data |
 
-本ノードは ROS topic から sensor data を subscribe しない。ZED SDK の `pyzed.sl.Camera` から直接 sensor data を取得する。
+topic 名は `mag_topic` parameter で変更可能とする。
+
+本ノードは ZED SDK の `pyzed.sl.Camera` から直接 sensor data を取得しない。
 
 ## 6. Publish Topic
 
@@ -134,47 +137,54 @@ bool valid
 
 | Parameter | Type | Default | Range / Constraint | 用途 |
 | --- | --- | --- | --- | --- |
+| `mag_topic` | `string` | `/zed2i/zed_node/imu/mag` | non-empty | subscribe する magnetometer topic |
 | `center_x` | `double` | `-2.5354` | finite value | 360 度回転データから求めた磁場中心 X |
 | `center_z` | `double` | `-10.3439` | finite value | 360 度回転データから求めた磁場中心 Z |
 | `zero_heading_deg` | `double` | `40.0` | finite value | ロボット実 yaw = 0 deg のときの磁気角 |
-| `publish_rate_hz` | `double` | `20.0` | `> 0.0` | sensor data 取得と publish の周期 |
+| `publish_rate_hz` | `double` | `20.0` | `> 0.0` | `/zed/heading` の最大 publish rate |
 | `frame_id` | `string` | `zed2i_mag` | non-empty | message header の frame id |
 | `invert_yaw` | `bool` | `false` | `true` or `false` | yaw 符号反転が必要な場合に使用する |
+| `magnetic_field_scale` | `double` | `1000000.0` | finite value | `sensor_msgs/msg/MagneticField` の Tesla 値を microtesla 相当へ変換するscale |
 
 ### 7.1 Parameter Requirements
 
 | ID | Requirement |
 | --- | --- |
-| PR-001 | `center_x`, `center_z`, `zero_heading_deg` は source code 固定値ではなく ROS parameter から設定できること。 |
-| PR-002 | `publish_rate_hz <= 0.0` の場合、起動時に validation error とすること。 |
-| PR-003 | `frame_id` が空文字の場合、起動時に validation error とすること。 |
-| PR-004 | `center_x`, `center_z`, `zero_heading_deg` が finite value でない場合、起動時に validation error とすること。 |
-| PR-005 | 起動時 log に `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw` を出力すること。 |
-| PR-006 | parameter は launch 引数または YAML から設定できること。 |
+| PR-001 | `mag_topic` が空文字の場合、起動時に validation error とすること。 |
+| PR-002 | `center_x`, `center_z`, `zero_heading_deg` は source code 固定値ではなく ROS parameter から設定できること。 |
+| PR-003 | `publish_rate_hz <= 0.0` の場合、起動時に validation error とすること。 |
+| PR-004 | `frame_id` が空文字の場合、起動時に validation error とすること。 |
+| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale` が finite value でない場合、起動時に validation error とすること。 |
+| PR-006 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale` を出力すること。 |
+| PR-007 | parameter は launch 引数または YAML から設定できること。 |
 
 ### 7.2 YAML Example
 
 ```yaml
 zed_heading_publisher:
   ros__parameters:
+    mag_topic: /zed2i/zed_node/imu/mag
     center_x: -2.5354
     center_z: -10.3439
     zero_heading_deg: 40.0
     publish_rate_hz: 20.0
     frame_id: zed2i_mag
     invert_yaw: false
+    magnetic_field_scale: 1000000.0
 ```
 
 ## 8. 角度定義
 
 ### 8.1 Coordinate Selection
 
-ZED2i magnetometer の X-Z 平面を使用する。
+`sensor_msgs/msg/MagneticField` の X-Z 平面を使用する。
 
 ```text
-raw_x = magnetic_field_uncalibrated[0]
-raw_z = magnetic_field_uncalibrated[2]
+raw_x = msg.magnetic_field.x * magnetic_field_scale
+raw_z = msg.magnetic_field.z * magnetic_field_scale
 ```
+
+`sensor_msgs/msg/MagneticField` は ROS 標準では Tesla 単位である。既存の `center_x`, `center_z` は microtesla 相当の値として扱っているため、default では `magnetic_field_scale: 1000000.0` を適用する。
 
 Y 軸は本ノードの heading 算出には使用しない。
 
@@ -251,30 +261,25 @@ normalize_to_180(angle_deg) = (angle_deg + 180.0) % 360.0 - 180.0
 
 ## 10. Control Flow
 
-本ノードは明示的な state machine を持たない。timer callback により周期的に sensor data 取得、補正、publish を行う。
+本ノードは明示的な state machine を持たない。magnetometer callback により sensor data 受信、補正、publish を行う。
 
 ```text
 STARTUP
   -> declare parameters
   -> validate parameters
-  -> open ZED2i
   -> create publisher
-  -> create timer
-  -> TIMER_LOOP
+  -> create magnetometer subscription
+  -> MAG_CALLBACK
 
-TIMER_LOOP
-  -> get_sensors_data
-  -> get_magnetometer_data
-  -> get_magnetic_field_uncalibrated
+MAG_CALLBACK
+  -> receive sensor_msgs/msg/MagneticField
+  -> apply publish_rate_hz throttle
   -> extract raw_x and raw_z
   -> apply hard-iron correction
   -> calculate magnetic_heading_deg
   -> calculate robot_yaw_deg
   -> calculate robot_yaw_rad
   -> publish /zed/heading
-
-SHUTDOWN
-  -> close ZED2i
 ```
 
 ### 10.1 Startup Requirements
@@ -282,26 +287,24 @@ SHUTDOWN
 | ID | Requirement |
 | --- | --- |
 | CF-001 | node 起動時に全 parameter を宣言、取得、validation すること。 |
-| CF-002 | ZED2i は `pyzed.sl.Camera` で open すること。 |
-| CF-003 | `camera_resolution` は初期実装では `HD720` とすること。 |
-| CF-004 | `camera_fps` は初期実装では `30` とすること。 |
-| CF-005 | `depth_mode` は `NONE` とすること。 |
-| CF-006 | ZED2i を open できない場合は起動失敗とすること。 |
+| CF-002 | `mag_topic` の `sensor_msgs/msg/MagneticField` subscription を作成すること。 |
+| CF-003 | magnetometer subscription は sensor data QoS を使用すること。 |
+| CF-004 | ZED2i camera device を直接 open しないこと。 |
 
 ### 10.2 Timer Loop Requirements
 
 | ID | Requirement |
 | --- | --- |
-| CF-010 | timer period は `1.0 / publish_rate_hz` とすること。 |
-| CF-011 | sensor data は `sl.TIME_REFERENCE.CURRENT` で取得すること。 |
-| CF-012 | `get_sensors_data` が成功した周期のみ publish すること。 |
+| CF-010 | magnetometer message を受信した場合のみ処理すること。 |
+| CF-011 | publish interval は `1.0 / publish_rate_hz` 以上とすること。 |
+| CF-012 | `msg.magnetic_field.x` と `msg.magnetic_field.z` を使用すること。 |
 | CF-013 | publish message の `header.stamp` は publish 時の ROS clock とすること。 |
 | CF-014 | publish message の `header.frame_id` は `frame_id` parameter とすること。 |
 | CF-015 | publish 成功時の `valid` は `true` とすること。 |
 
 ## 11. QoS
 
-初期実装では以下を使用する。
+`/zed/heading` publish は初期実装では以下を使用する。
 
 ```text
 history: keep last
@@ -309,18 +312,16 @@ depth: 10
 reliability: reliable
 ```
 
-高頻度 publish で最新値のみが重要になった場合は、`depth: 1` または `best effort` への変更を検討する。
+ZED wrapper 由来の `/zed2i/zed_node/imu/mag` subscription は sensor data QoS を使用する。
 
 ## 12. Failure Cases
 
 | ID | Failure Case | Required Behavior |
 | --- | --- | --- |
 | FC-001 | parameter validation error | 起動失敗とする |
-| FC-002 | ZED SDK import error | error log を出し、起動失敗とする |
-| FC-003 | ZED2i open failure | error log を出し、起動失敗とする |
-| FC-004 | `get_sensors_data` failure | warn log を出し、その周期では publish しない |
-| FC-005 | magnetometer data 取得 failure | warn log を出し、その周期では publish しない |
-| FC-006 | raw 磁場値が finite value でない | warn log を出し、その周期では publish しない |
+| FC-002 | `mag_topic` が未受信 | `/zed/heading` を publish しない |
+| FC-003 | raw 磁場値が finite value でない | warn log を出し、その message では publish しない |
+| FC-004 | input rate が `publish_rate_hz` より高い | publish を throttle する |
 
 warn log は必要に応じて throttle し、センサ取得失敗が連続した場合でも log が過剰に増えないようにする。
 
@@ -328,11 +329,12 @@ warn log は必要に応じて throttle し、センサ取得失敗が連続し�
 
 | ID | Requirement |
 | --- | --- |
-| SR-001 | sensor data 取得失敗時に古い yaw を再 publish しないこと。 |
+| SR-001 | magnetometer data 未受信時に古い yaw を再 publish しないこと。 |
 | SR-002 | raw 磁場値が不正な場合に推定値を捏造して publish しないこと。 |
 | SR-003 | 本ノードは速度指令や motor command を publish しないこと。 |
 | SR-004 | `center_x`, `center_z`, `zero_heading_deg` の使用値を起動 log で追跡できること。 |
 | SR-005 | yaw 正方向は左旋回で増加する向きとし、後段の `angular.z` 正方向と整合させること。 |
+| SR-006 | 本ノードは ZED camera device を直接 open しないこと。 |
 
 ## 14. 実機確認項目
 
@@ -344,18 +346,8 @@ warn log は必要に応じて throttle し、センサ取得失敗が連続し�
 | TT-004 | `+179 deg` 付近からさらに左旋回する | `robot_yaw_deg` が `-180 deg` 付近へ連続的に折り返す |
 | TT-005 | `/zed/heading` を rosbag 記録する | raw, corrected, yaw が同一 timestamp の message として記録される |
 | TT-006 | `center_x`, `center_z`, `zero_heading_deg` を YAML で変更して起動する | 起動 log と publish 値に parameter 変更が反映される |
+| TT-007 | `/zed2i/zed_node/imu/mag` を停止する | `/zed/heading` が古い値を再 publish しない |
 
 ## 15. Future Extensions
 
-初期実装では 1 ノード構成とする。将来、補正アルゴリズムやセンサフュージョンを分離したくなった場合は、以下の 2 ノード構成への移行を検討する。
-
-```text
-zed_magnetometer_publisher
-  -> raw magnetic field を publish
-
-heading_estimator
-  -> raw magnetic field を subscribe
-  -> 補正、yaw 算出、publish
-```
-
-ただし、初期実装では topic 数、launch 設定、同期処理の複雑化を避けるため、`zed_heading_publisher` 1 ノードに集約する。
+将来、magnetometer data と VIO/IMU を統合した sensor fusion を行う場合は、`zed_heading_publisher` ではなく別の fusion node を追加する。

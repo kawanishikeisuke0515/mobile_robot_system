@@ -12,6 +12,7 @@ def generate_launch_description():
     node_name = LaunchConfiguration('node_name')
     serial_number = LaunchConfiguration('serial_number')
     camera_id = LaunchConfiguration('camera_id')
+    publish_urdf = LaunchConfiguration('publish_urdf')
     publish_tf = LaunchConfiguration('publish_tf')
     publish_map_tf = LaunchConfiguration('publish_map_tf')
     publish_imu_tf = LaunchConfiguration('publish_imu_tf')
@@ -64,6 +65,11 @@ def generate_launch_description():
             description='ZED camera device ID. -1 means wrapper default.',
         ),
         DeclareLaunchArgument(
+            'publish_urdf',
+            default_value='true',
+            description='Start robot_state_publisher with zed_description URDF.',
+        ),
+        DeclareLaunchArgument(
             'publish_tf',
             default_value='true',
             description='Publish odom to camera_link TF from zed_wrapper.',
@@ -107,6 +113,7 @@ def generate_launch_description():
                 'node_name': node_name,
                 'serial_number': serial_number,
                 'camera_id': camera_id,
+                'publish_urdf': publish_urdf,
                 'publish_tf': publish_tf,
                 'publish_map_tf': publish_map_tf,
                 'publish_imu_tf': publish_imu_tf,

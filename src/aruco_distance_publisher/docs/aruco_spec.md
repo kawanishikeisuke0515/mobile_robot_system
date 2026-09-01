@@ -1,12 +1,15 @@
 # ArUco Distance Publisher
 
-This package detects ArUco markers and publishes distance information.
+This package subscribes to a ZED image topic, detects ArUco markers, and publishes distance information.
 
 ## Overview
 - Uses OpenCV and ArUco library for marker detection
+- Receives images from the ZED data hub instead of opening the ZED camera device directly
 - Publishes ArucoDistance messages with marker ID and distance
 
 ## Topics
+- Subscribes to `/zed2i/zed_node/rgb/color/rect/image`: `sensor_msgs/msg/Image`
+- Subscribes to `/zed2i/zed_node/rgb/color/rect/camera_info`: `sensor_msgs/msg/CameraInfo`
 - `/aruco/distance`: `aruco_interfaces/msg/ArucoDistance`
 
 ## Message Fields
@@ -53,8 +56,11 @@ Downstream controllers use this value to decide whether it is safe to start mark
 
 ## Dependencies
 - OpenCV
+- cv_bridge
+- sensor_msgs
 - aruco_interfaces
 
 ## Usage
 1. Build: `colcon build --packages-select aruco_distance_publisher`
-2. Run: `ros2 run aruco_distance_publisher aruco_distance_publisher`
+2. Start the ZED data hub
+3. Run: `ros2 run aruco_distance_publisher aruco_distance_publisher`

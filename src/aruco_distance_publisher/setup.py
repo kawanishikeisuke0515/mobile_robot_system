@@ -15,7 +15,7 @@ setup(
         ('share/' + package_name + '/distance_publisher', [
             *glob('aruco_distance_publisher/distance_publisher/calib_result*.npz'),
         ]),
-        ('share/' + package_name + '/docs', ['docs/aruco_spec.md']),
+        ('share/' + package_name + '/docs', glob('docs/*.md')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,

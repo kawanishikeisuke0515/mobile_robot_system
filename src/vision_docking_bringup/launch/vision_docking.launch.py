@@ -6,6 +6,9 @@ from launch_ros.actions import Node
 
 def generate_launch_description():
     camera_side = LaunchConfiguration('camera_side')
+    image_topic = LaunchConfiguration('image_topic')
+    camera_info_topic = LaunchConfiguration('camera_info_topic')
+    use_camera_info = LaunchConfiguration('use_camera_info')
     marker_length = LaunchConfiguration('marker_length')
     target_z = LaunchConfiguration('target_z')
     kp_z = LaunchConfiguration('kp_z')
@@ -28,7 +31,22 @@ def generate_launch_description():
         DeclareLaunchArgument(
             'camera_side',
             default_value='left',
-            description='ZED2 camera side used for marker detection: left or right',
+            description='Calibration side used for marker pose estimation: left or right',
+        ),
+        DeclareLaunchArgument(
+            'image_topic',
+            default_value='/zed2i/zed_node/rgb/color/rect/image',
+            description='Image topic used for marker detection',
+        ),
+        DeclareLaunchArgument(
+            'camera_info_topic',
+            default_value='/zed2i/zed_node/rgb/color/rect/camera_info',
+            description='CameraInfo topic used when use_camera_info is true',
+        ),
+        DeclareLaunchArgument(
+            'use_camera_info',
+            default_value='true',
+            description='Use CameraInfo calibration instead of calibration file',
         ),
         DeclareLaunchArgument(
             'marker_length',
@@ -121,6 +139,9 @@ def generate_launch_description():
             name='aruco_distance_publisher',
             output='screen',
             parameters=[{
+                'image_topic': image_topic,
+                'camera_info_topic': camera_info_topic,
+                'use_camera_info': use_camera_info,
                 'camera_side': camera_side,
                 'marker_length': marker_length,
             }],
