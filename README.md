@@ -95,6 +95,11 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
 - `use_camera_model_center_error=true` uses camera `cx` / `fx` for `normalized_center_error`.
 - `camera_side` selects the calibration file only when `use_camera_info=false`.
 
+## ZED Heading Input
+- `zed_heading_publisher` subscribes to `/zed2i/zed_node/imu/mag`.
+- The default wrapper-axis mapping is `raw_x=-mag.y`, `raw_z=mag.x`.
+- For legacy comparison, launch with `raw_x_axis:=x raw_x_sign:=1.0 raw_z_axis:=z raw_z_sign:=1.0`.
+
 ## ROS2 Output
 - Publish topic: /aruco/distance
 - Publish data:

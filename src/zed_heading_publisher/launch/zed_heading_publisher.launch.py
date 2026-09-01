@@ -11,12 +11,36 @@ def generate_launch_description():
     package_share = Path(get_package_share_directory('zed_heading_publisher'))
     config_path = package_share / 'config' / 'zed_heading_publisher.yaml'
     mag_topic = LaunchConfiguration('mag_topic')
+    raw_x_axis = LaunchConfiguration('raw_x_axis')
+    raw_x_sign = LaunchConfiguration('raw_x_sign')
+    raw_z_axis = LaunchConfiguration('raw_z_axis')
+    raw_z_sign = LaunchConfiguration('raw_z_sign')
 
     return LaunchDescription([
         DeclareLaunchArgument(
             'mag_topic',
             default_value='/zed2i/zed_node/imu/mag',
             description='MagneticField topic published by the ZED data hub.',
+        ),
+        DeclareLaunchArgument(
+            'raw_x_axis',
+            default_value='y',
+            description='MagneticField axis used as legacy right-axis raw_x.',
+        ),
+        DeclareLaunchArgument(
+            'raw_x_sign',
+            default_value='-1.0',
+            description='Sign applied to raw_x_axis.',
+        ),
+        DeclareLaunchArgument(
+            'raw_z_axis',
+            default_value='x',
+            description='MagneticField axis used as legacy forward-axis raw_z.',
+        ),
+        DeclareLaunchArgument(
+            'raw_z_sign',
+            default_value='1.0',
+            description='Sign applied to raw_z_axis.',
         ),
         Node(
             package='zed_heading_publisher',
@@ -27,6 +51,10 @@ def generate_launch_description():
                 str(config_path),
                 {
                     'mag_topic': mag_topic,
+                    'raw_x_axis': raw_x_axis,
+                    'raw_x_sign': raw_x_sign,
+                    'raw_z_axis': raw_z_axis,
+                    'raw_z_sign': raw_z_sign,
                 },
             ],
         ),

@@ -145,6 +145,10 @@ bool valid
 | `frame_id` | `string` | `zed2i_mag` | non-empty | message header の frame id |
 | `invert_yaw` | `bool` | `false` | `true` or `false` | yaw 符号反転が必要な場合に使用する |
 | `magnetic_field_scale` | `double` | `1000000.0` | finite value | `sensor_msgs/msg/MagneticField` の Tesla 値を microtesla 相当へ変換するscale |
+| `raw_x_axis` | `string` | `y` | `x`, `y`, `z` | `raw_x` に使用する `MagneticField` 軸 |
+| `raw_x_sign` | `double` | `-1.0` | finite non-zero | `raw_x_axis` に掛ける符号 |
+| `raw_z_axis` | `string` | `x` | `x`, `y`, `z` | `raw_z` に使用する `MagneticField` 軸 |
+| `raw_z_sign` | `double` | `1.0` | finite non-zero | `raw_z_axis` に掛ける符号 |
 
 ### 7.1 Parameter Requirements
 
@@ -154,9 +158,11 @@ bool valid
 | PR-002 | `center_x`, `center_z`, `zero_heading_deg` は source code 固定値ではなく ROS parameter から設定できること。 |
 | PR-003 | `publish_rate_hz <= 0.0` の場合、起動時に validation error とすること。 |
 | PR-004 | `frame_id` が空文字の場合、起動時に validation error とすること。 |
-| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale` が finite value でない場合、起動時に validation error とすること。 |
-| PR-006 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale` を出力すること。 |
-| PR-007 | parameter は launch 引数または YAML から設定できること。 |
+| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale`, `raw_x_sign`, `raw_z_sign` が finite value でない場合、起動時に validation error とすること。 |
+| PR-006 | `raw_x_axis`, `raw_z_axis` が `x`, `y`, `z` 以外の場合、起動時に validation error とすること。 |
+| PR-007 | `raw_x_sign`, `raw_z_sign` が `0.0` の場合、起動時に validation error とすること。 |
+| PR-008 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale`, raw axis mapping を出力すること。 |
+| PR-009 | parameter は launch 引数または YAML から設定できること。 |
 
 ### 7.2 YAML Example
 
@@ -171,22 +177,35 @@ zed_heading_publisher:
     frame_id: zed2i_mag
     invert_yaw: false
     magnetic_field_scale: 1000000.0
+    raw_x_axis: y
+    raw_x_sign: -1.0
+    raw_z_axis: x
+    raw_z_sign: 1.0
 ```
 
 ## 8. 角度定義
 
 ### 8.1 Coordinate Selection
 
-`sensor_msgs/msg/MagneticField` の X-Z 平面を使用する。
+`sensor_msgs/msg/MagneticField` から、旧SDK直読み実装で使っていた `raw_x`（ロボット右方向相当）と `raw_z`（ロボット前方向相当）を作る。
+
+ZED wrapper の ROS topic では、水平面は `x,y` 軸として扱われるため、default は以下とする。
 
 ```text
-raw_x = msg.magnetic_field.x * magnetic_field_scale
-raw_z = msg.magnetic_field.z * magnetic_field_scale
+raw_x = -msg.magnetic_field.y * magnetic_field_scale
+raw_z =  msg.magnetic_field.x * magnetic_field_scale
 ```
 
 `sensor_msgs/msg/MagneticField` は ROS 標準では Tesla 単位である。既存の `center_x`, `center_z` は microtesla 相当の値として扱っているため、default では `magnetic_field_scale: 1000000.0` を適用する。
 
-Y 軸は本ノードの heading 算出には使用しない。
+旧実装相当の `msg.magnetic_field.x` / `msg.magnetic_field.z` を確認したい場合は、以下の parameter に変更する。
+
+```text
+raw_x_axis = x
+raw_x_sign = 1.0
+raw_z_axis = z
+raw_z_sign = 1.0
+```
 
 ### 8.2 Hard-Iron Correction
 
@@ -297,7 +316,7 @@ MAG_CALLBACK
 | --- | --- |
 | CF-010 | magnetometer message を受信した場合のみ処理すること。 |
 | CF-011 | publish interval は `1.0 / publish_rate_hz` 以上とすること。 |
-| CF-012 | `msg.magnetic_field.x` と `msg.magnetic_field.z` を使用すること。 |
+| CF-012 | raw axis mapping parameter に従って `msg.magnetic_field` から `raw_x`, `raw_z` を抽出すること。 |
 | CF-013 | publish message の `header.stamp` は publish 時の ROS clock とすること。 |
 | CF-014 | publish message の `header.frame_id` は `frame_id` parameter とすること。 |
 | CF-015 | publish 成功時の `valid` は `true` とすること。 |

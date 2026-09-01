@@ -18,6 +18,10 @@ def generate_launch_description():
     max_angular_speed = LaunchConfiguration('max_angular_speed')
     yaw_linear_gate = LaunchConfiguration('yaw_linear_gate')
     mag_topic = LaunchConfiguration('mag_topic')
+    raw_x_axis = LaunchConfiguration('raw_x_axis')
+    raw_x_sign = LaunchConfiguration('raw_x_sign')
+    raw_z_axis = LaunchConfiguration('raw_z_axis')
+    raw_z_sign = LaunchConfiguration('raw_z_sign')
     log_positions = LaunchConfiguration('log_positions')
     start_locomotion = LaunchConfiguration('start_locomotion')
 
@@ -99,6 +103,26 @@ def generate_launch_description():
             description='MagneticField topic published by the ZED data hub',
         ),
         DeclareLaunchArgument(
+            'raw_x_axis',
+            default_value='y',
+            description='MagneticField axis used as legacy right-axis raw_x',
+        ),
+        DeclareLaunchArgument(
+            'raw_x_sign',
+            default_value='-1.0',
+            description='Sign applied to raw_x_axis',
+        ),
+        DeclareLaunchArgument(
+            'raw_z_axis',
+            default_value='x',
+            description='MagneticField axis used as legacy forward-axis raw_z',
+        ),
+        DeclareLaunchArgument(
+            'raw_z_sign',
+            default_value='1.0',
+            description='Sign applied to raw_z_axis',
+        ),
+        DeclareLaunchArgument(
             'log_positions',
             default_value='true',
             description='Start uwb_position_logger when true',
@@ -131,6 +155,10 @@ def generate_launch_description():
                 zed_heading_config,
                 {
                     'mag_topic': mag_topic,
+                    'raw_x_axis': raw_x_axis,
+                    'raw_x_sign': raw_x_sign,
+                    'raw_z_axis': raw_z_axis,
+                    'raw_z_sign': raw_z_sign,
                 },
             ],
         ),

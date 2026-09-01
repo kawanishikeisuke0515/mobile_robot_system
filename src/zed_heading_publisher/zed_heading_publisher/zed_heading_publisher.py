@@ -72,6 +72,16 @@ def get_bool_parameter(value) -> bool:
     raise ValueError(f'invalid bool parameter value: {value}')
 
 
+def get_axis_value(magnetic_field, axis: str) -> float:
+    if axis == 'x':
+        return float(magnetic_field.x)
+    if axis == 'y':
+        return float(magnetic_field.y)
+    if axis == 'z':
+        return float(magnetic_field.z)
+    raise ValueError(f'invalid magnetic field axis: {axis}')
+
+
 class ZedHeadingPublisher(Node):
     def __init__(self):
         super().__init__('zed_heading_publisher')
@@ -84,6 +94,10 @@ class ZedHeadingPublisher(Node):
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)
         self.declare_parameter('magnetic_field_scale', 1000000.0)
+        self.declare_parameter('raw_x_axis', 'y')
+        self.declare_parameter('raw_x_sign', -1.0)
+        self.declare_parameter('raw_z_axis', 'x')
+        self.declare_parameter('raw_z_sign', 1.0)
 
         self.mag_topic = str(self.get_parameter('mag_topic').value)
         self.center_x = float(self.get_parameter('center_x').value)
@@ -95,6 +109,10 @@ class ZedHeadingPublisher(Node):
         self.magnetic_field_scale = float(
             self.get_parameter('magnetic_field_scale').value
         )
+        self.raw_x_axis = str(self.get_parameter('raw_x_axis').value)
+        self.raw_x_sign = float(self.get_parameter('raw_x_sign').value)
+        self.raw_z_axis = str(self.get_parameter('raw_z_axis').value)
+        self.raw_z_sign = float(self.get_parameter('raw_z_sign').value)
         self._validate_parameters()
 
         self.publisher_ = self.create_publisher(ZedHeading, '/zed/heading', 10)
@@ -111,7 +129,7 @@ class ZedHeadingPublisher(Node):
         self.get_logger().info(
             'mag_topic=%s center_x=%.5f center_z=%.5f zero_heading_deg=%.5f '
             'publish_rate_hz=%.3f frame_id=%s invert_yaw=%s '
-            'magnetic_field_scale=%.5f'
+            'magnetic_field_scale=%.5f raw_x=%+.1f*%s raw_z=%+.1f*%s'
             % (
                 self.mag_topic,
                 self.center_x,
@@ -121,6 +139,10 @@ class ZedHeadingPublisher(Node):
                 self.frame_id,
                 self.invert_yaw,
                 self.magnetic_field_scale,
+                self.raw_x_sign,
+                self.raw_x_axis,
+                self.raw_z_sign,
+                self.raw_z_axis,
             )
         )
         self.get_logger().info('publishing ZED2i heading on /zed/heading')
@@ -138,13 +160,29 @@ class ZedHeadingPublisher(Node):
             raise ValueError('frame_id must not be empty')
         if not math.isfinite(self.magnetic_field_scale):
             raise ValueError('magnetic_field_scale must be finite')
+        if self.raw_x_axis not in ('x', 'y', 'z'):
+            raise ValueError("raw_x_axis must be one of 'x', 'y', or 'z'")
+        if self.raw_z_axis not in ('x', 'y', 'z'):
+            raise ValueError("raw_z_axis must be one of 'x', 'y', or 'z'")
+        if not is_finite(self.raw_x_sign, self.raw_z_sign):
+            raise ValueError('raw_x_sign and raw_z_sign must be finite')
+        if self.raw_x_sign == 0.0 or self.raw_z_sign == 0.0:
+            raise ValueError('raw_x_sign and raw_z_sign must be non-zero')
 
     def mag_callback(self, msg: MagneticField):
         if not self._should_publish():
             return
 
-        raw_x = float(msg.magnetic_field.x) * self.magnetic_field_scale
-        raw_z = float(msg.magnetic_field.z) * self.magnetic_field_scale
+        raw_x = (
+            self.raw_x_sign
+            * get_axis_value(msg.magnetic_field, self.raw_x_axis)
+            * self.magnetic_field_scale
+        )
+        raw_z = (
+            self.raw_z_sign
+            * get_axis_value(msg.magnetic_field, self.raw_z_axis)
+            * self.magnetic_field_scale
+        )
 
         if not is_finite(raw_x, raw_z):
             self._warn_throttled(
