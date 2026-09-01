@@ -4,6 +4,7 @@ from dataclasses import dataclass
 from typing import Optional
 
 import rclpy
+from rcl_interfaces.msg import ParameterDescriptor
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import MagneticField
@@ -82,6 +83,17 @@ def get_axis_value(magnetic_field, axis: str) -> float:
     raise ValueError(f'invalid magnetic field axis: {axis}')
 
 
+def get_axis_parameter(value) -> str:
+    if isinstance(value, bool):
+        if value:
+            return 'y'
+        raise ValueError("bool false is not a valid magnetic field axis")
+    axis = str(value).strip().lower()
+    if axis in ('x', 'y', 'z'):
+        return axis
+    raise ValueError(f"axis parameter must be one of 'x', 'y', or 'z': {value}")
+
+
 class ZedHeadingPublisher(Node):
     def __init__(self):
         super().__init__('zed_heading_publisher')
@@ -94,9 +106,10 @@ class ZedHeadingPublisher(Node):
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)
         self.declare_parameter('magnetic_field_scale', 1000000.0)
-        self.declare_parameter('raw_x_axis', 'y')
+        axis_descriptor = ParameterDescriptor(dynamic_typing=True)
+        self.declare_parameter('raw_x_axis', 'y', axis_descriptor)
         self.declare_parameter('raw_x_sign', -1.0)
-        self.declare_parameter('raw_z_axis', 'x')
+        self.declare_parameter('raw_z_axis', 'x', axis_descriptor)
         self.declare_parameter('raw_z_sign', 1.0)
 
         self.mag_topic = str(self.get_parameter('mag_topic').value)
@@ -109,9 +122,9 @@ class ZedHeadingPublisher(Node):
         self.magnetic_field_scale = float(
             self.get_parameter('magnetic_field_scale').value
         )
-        self.raw_x_axis = str(self.get_parameter('raw_x_axis').value)
+        self.raw_x_axis = get_axis_parameter(self.get_parameter('raw_x_axis').value)
         self.raw_x_sign = float(self.get_parameter('raw_x_sign').value)
-        self.raw_z_axis = str(self.get_parameter('raw_z_axis').value)
+        self.raw_z_axis = get_axis_parameter(self.get_parameter('raw_z_axis').value)
         self.raw_z_sign = float(self.get_parameter('raw_z_sign').value)
         self._validate_parameters()
 
