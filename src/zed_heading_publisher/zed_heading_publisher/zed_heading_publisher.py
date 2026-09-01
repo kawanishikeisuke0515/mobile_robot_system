@@ -99,9 +99,9 @@ class ZedHeadingPublisher(Node):
         super().__init__('zed_heading_publisher')
 
         self.declare_parameter('mag_topic', '/zed2i/zed_node/imu/mag')
-        self.declare_parameter('center_x', -2.5354)
-        self.declare_parameter('center_z', -10.3439)
-        self.declare_parameter('zero_heading_deg', 40.0)
+        self.declare_parameter('center_x', -0.629279)
+        self.declare_parameter('center_z', -0.874388)
+        self.declare_parameter('zero_heading_deg', 39.7)
         self.declare_parameter('publish_rate_hz', 20.0)
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)

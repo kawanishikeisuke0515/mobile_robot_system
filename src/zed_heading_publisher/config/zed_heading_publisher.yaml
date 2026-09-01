@@ -1,9 +1,9 @@
 zed_heading_publisher:
   ros__parameters:
     mag_topic: /zed2i/zed_node/imu/mag
-    center_x: -2.5354
-    center_z: -10.3439
-    zero_heading_deg: 40.0
+    center_x: -0.629279
+    center_z: -0.874388
+    zero_heading_deg: 39.7
     publish_rate_hz: 20.0
     frame_id: "zed2i_mag"
     invert_yaw: false

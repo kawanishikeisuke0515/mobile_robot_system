@@ -138,9 +138,9 @@ bool valid
 | Parameter | Type | Default | Range / Constraint | 用途 |
 | --- | --- | --- | --- | --- |
 | `mag_topic` | `string` | `/zed2i/zed_node/imu/mag` | non-empty | subscribe する magnetometer topic |
-| `center_x` | `double` | `-2.5354` | finite value | 360 度回転データから求めた磁場中心 X |
-| `center_z` | `double` | `-10.3439` | finite value | 360 度回転データから求めた磁場中心 Z |
-| `zero_heading_deg` | `double` | `40.0` | finite value | ロボット実 yaw = 0 deg のときの磁気角 |
+| `center_x` | `double` | `-0.629279` | finite value | 360 度回転データから求めた磁場中心 X |
+| `center_z` | `double` | `-0.874388` | finite value | 360 度回転データから求めた磁場中心 Z |
+| `zero_heading_deg` | `double` | `39.7` | finite value | ロボット実 yaw = 0 deg のときの磁気角 |
 | `publish_rate_hz` | `double` | `20.0` | `> 0.0` | `/zed/heading` の最大 publish rate |
 | `frame_id` | `string` | `zed2i_mag` | non-empty | message header の frame id |
 | `invert_yaw` | `bool` | `false` | `true` or `false` | yaw 符号反転が必要な場合に使用する |
@@ -172,9 +172,9 @@ bool valid
 zed_heading_publisher:
   ros__parameters:
     mag_topic: /zed2i/zed_node/imu/mag
-    center_x: -2.5354
-    center_z: -10.3439
-    zero_heading_deg: 40.0
+    center_x: -0.629279
+    center_z: -0.874388
+    zero_heading_deg: 39.7
     publish_rate_hz: 20.0
     frame_id: zed2i_mag
     invert_yaw: false
