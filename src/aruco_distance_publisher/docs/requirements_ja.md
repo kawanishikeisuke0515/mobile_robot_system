@@ -57,7 +57,7 @@ topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapp
 | `yaw` | `float` | marker rvecから推定したmarker yaw[rad]を格納すること。 |
 | `center_u` | `float` | 検出cornerから計算したmarker中心u座標[pixel]を格納すること。 |
 | `center_v` | `float` | 検出cornerから計算したmarker中心v座標[pixel]を格納すること。 |
-| `normalized_center_error` | `float` | 画像中心からの水平誤差を、画像半幅で正規化して格納すること。 |
+| `normalized_center_error` | `float` | 光学中心からの水平誤差を、camera modelの焦点距離で正規化して格納すること。 |
 
 ## 6. Parameters
 
@@ -67,6 +67,7 @@ topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapp
 | `camera_info_topic` | `string` | `/zed2i/zed_node/rgb/color/rect/camera_info` | empty or topic name | CameraInfoをsubscribeする場合のtopic |
 | `use_camera_info` | `bool` | `true` | `true` or `false` | calibration fileではなくCameraInfoを使用する |
 | `use_rectified_camera_info` | `bool` | `true` | `true` or `false` | rectified image用にCameraInfoのprojection matrixを使用する |
+| `use_camera_model_center_error` | `bool` | `true` | `true` or `false` | center error計算にcamera matrixの `cx` / `fx` を使用する |
 | `camera_side` | `string` | `left` | `left` または `right` | calibration file選択用。side-by-side画像分割には使用しない |
 | `marker_length` | `float` | `0.168` | `> 0.0` | ArUcoマーカー一辺の長さ[m] |
 
@@ -81,7 +82,8 @@ topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapp
 | PR-005 | `use_camera_info == false` の場合、`camera_side` に対応するcamera calibration fileを読み込むこと。 |
 | PR-006 | `use_camera_info == true` の場合、CameraInfoを受信するまでpose推定を行わないこと。 |
 | PR-007 | `use_rectified_camera_info == true` の場合、CameraInfoの `P` からcamera matrixを取得し、distortion coefficientsはzeroとして扱うこと。 |
-| PR-008 | parameterはlaunch引数またはROS parameterで設定できること。 |
+| PR-008 | `use_camera_model_center_error == true` の場合、`normalized_center_error` はcamera matrixの `cx` を基準にし、`fx` で正規化すること。 |
+| PR-009 | parameterはlaunch引数またはROS parameterで設定できること。 |
 
 ## 7. State Machine / Control Flow
 
@@ -109,7 +111,7 @@ IMAGE_CALLBACK
 
 | ID | Requirement |
 | --- | --- |
-| CF-001 | node起動時に `image_topic`, `camera_info_topic`, `use_camera_info`, `use_rectified_camera_info`, `camera_side`, `marker_length` をvalidateすること。 |
+| CF-001 | node起動時に `image_topic`, `camera_info_topic`, `use_camera_info`, `use_rectified_camera_info`, `use_camera_model_center_error`, `camera_side`, `marker_length` をvalidateすること。 |
 | CF-002 | `use_camera_info == false` の場合、`camera_side` に対応する calibration fileをsource treeまたはinstall treeから探索すること。 |
 | CF-003 | `use_camera_info == false` の場合、calibration fileから `cameraMatrix` と `distCoeffs` を読み込むこと。 |
 | CF-004 | `use_camera_info == true` の場合、CameraInfo messageからcamera matrixとdistortion coefficientsを取得すること。 |
@@ -140,9 +142,10 @@ IMAGE_CALLBACK
 | CR-002 | `x` はcamera右方向を正とすること。 |
 | CR-003 | `y` はcamera下方向を正とすること。 |
 | CR-004 | `z` はcamera前方向を正とすること。 |
-| CR-005 | `normalized_center_error` はmarker中心が画像中心のとき `0.0` とすること。 |
+| CR-005 | `normalized_center_error` はmarker中心がcamera optical centerにあるとき `0.0` とすること。 |
 | CR-006 | `normalized_center_error` はmarker中心が画像右側のとき正、左側のとき負とすること。 |
 | CR-007 | 入力画像がrectified imageの場合、対応するrectified camera calibrationを使用すること。 |
+| CR-008 | `use_camera_model_center_error == false` の場合、legacy互換として画像中央と画像半幅による正規化を使用すること。 |
 
 ## 8. Failure Cases
 

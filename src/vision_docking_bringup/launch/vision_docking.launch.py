@@ -10,6 +10,7 @@ def generate_launch_description():
     camera_info_topic = LaunchConfiguration('camera_info_topic')
     use_camera_info = LaunchConfiguration('use_camera_info')
     use_rectified_camera_info = LaunchConfiguration('use_rectified_camera_info')
+    use_camera_model_center_error = LaunchConfiguration('use_camera_model_center_error')
     marker_length = LaunchConfiguration('marker_length')
     target_z = LaunchConfiguration('target_z')
     kp_z = LaunchConfiguration('kp_z')
@@ -53,6 +54,11 @@ def generate_launch_description():
             'use_rectified_camera_info',
             default_value='true',
             description='Use CameraInfo projection matrix for rectified image input',
+        ),
+        DeclareLaunchArgument(
+            'use_camera_model_center_error',
+            default_value='true',
+            description='Use camera cx/fx for image-center error calculation',
         ),
         DeclareLaunchArgument(
             'marker_length',
@@ -149,6 +155,7 @@ def generate_launch_description():
                 'camera_info_topic': camera_info_topic,
                 'use_camera_info': use_camera_info,
                 'use_rectified_camera_info': use_rectified_camera_info,
+                'use_camera_model_center_error': use_camera_model_center_error,
                 'camera_side': camera_side,
                 'marker_length': marker_length,
             }],

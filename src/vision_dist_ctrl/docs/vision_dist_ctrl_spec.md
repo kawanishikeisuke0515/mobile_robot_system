@@ -62,10 +62,10 @@ The controller uses `z` to compute forward/backward motion, `x` to compute later
 ```text
 center_u = (u1 + u2 + u3 + u4) / 4
 center_v = (v1 + v2 + v3 + v4) / 4
-normalized_center_error = (center_u - image_width / 2) / (image_width / 2)
+normalized_center_error = (center_u - cx) / fx
 ```
 
-`normalized_center_error` is near `0.0` when the marker is horizontally centered in the image. It approaches `+1.0` near the right edge and `-1.0` near the left edge.
+`normalized_center_error` is near `0.0` when the marker is horizontally aligned with the camera optical center. With camera-model-based calculation enabled, it is scaled by the focal length so ZED wrapper image resolution/downscale changes do not directly change the angular-control input.
 
 This requires adding `center_u`, `center_v`, and `normalized_center_error` to `aruco_interfaces/msg/ArucoDistance.msg` and populating them in `aruco_distance_publisher`.
 

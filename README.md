@@ -92,6 +92,7 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
 - The ZED camera device is opened only by the official `zed_wrapper`.
 - `use_camera_info=true` uses the ZED wrapper `CameraInfo` calibration by default.
 - `use_rectified_camera_info=true` uses `CameraInfo.p` and zero distortion for rectified images.
+- `use_camera_model_center_error=true` uses camera `cx` / `fx` for `normalized_center_error`.
 - `camera_side` selects the calibration file only when `use_camera_info=false`.
 
 ## ROS2 Output
@@ -159,7 +160,7 @@ During PRE_DOCKING and FINAL_DOCKING, `angular.z` is controlled to keep the mark
    - theta = atan2(x, z)
    - yaw = marker orientation angle from rvec
    - center_u, center_v = average of the four detected marker corner pixels
-   - normalized_center_error = (center_u - image_width / 2) / (image_width / 2)
+   - normalized_center_error = (center_u - cx) / fx when camera model center error is enabled
 8. Publish result to ROS2 topic
 
 ## Error Handling

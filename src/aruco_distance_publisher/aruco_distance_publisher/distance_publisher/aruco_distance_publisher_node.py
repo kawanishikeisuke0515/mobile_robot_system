@@ -49,8 +49,8 @@ def _marker_yaw_from_rvec(rvec) -> float:
     # When the marker faces the camera, OpenCV may report the normal along
     # either camera +Z or -Z depending on marker coordinate convention, so use
     # the normal direction that makes the front-facing pose yaw close to zero.
-    z_axis_reference = -marker_z_axis[2] if marker_z_axis[2] < 0.0 else marker_z_axis[2]
-    return math.atan2(float(marker_z_axis[0]), float(z_axis_reference))
+    marker_normal = -marker_z_axis if marker_z_axis[2] < 0.0 else marker_z_axis
+    return math.atan2(float(marker_normal[0]), float(marker_normal[2]))
 
 
 class ArucoDistancePublisher(Node):
@@ -66,6 +66,7 @@ class ArucoDistancePublisher(Node):
         )
         self.declare_parameter("use_camera_info", True)
         self.declare_parameter("use_rectified_camera_info", True)
+        self.declare_parameter("use_camera_model_center_error", True)
         self.declare_parameter("camera_side", "left")
         self.declare_parameter("marker_length", 0.168)
 
@@ -77,6 +78,9 @@ class ArucoDistancePublisher(Node):
         self.use_rectified_camera_info = _get_bool_parameter(
             self.get_parameter("use_rectified_camera_info").value
         )
+        self.use_camera_model_center_error = _get_bool_parameter(
+            self.get_parameter("use_camera_model_center_error").value
+        )
         self.camera_side = str(self.get_parameter("camera_side").value)
         self.marker_length = float(self.get_parameter("marker_length").value)
         self._validate_parameters()
@@ -87,6 +91,8 @@ class ArucoDistancePublisher(Node):
         self.bridge = CvBridge()
         self.camera_matrix = None
         self.dist_coeffs = None
+        self.center_u_reference = None
+        self.center_u_scale = None
         self.last_warn_time = None
 
         if self.use_camera_info:
@@ -97,6 +103,7 @@ class ArucoDistancePublisher(Node):
                 calib = np.load(calib_path)
                 self.camera_matrix = calib["cameraMatrix"]
                 self.dist_coeffs = calib["distCoeffs"]
+                self._update_center_error_model(self.camera_matrix)
             except Exception as exc:
                 raise RuntimeError(
                     f"failed to load calibration file: {calib_path}"
@@ -176,7 +183,25 @@ class ArucoDistancePublisher(Node):
 
         self.camera_matrix = camera_matrix
         self.dist_coeffs = dist_coeffs
+        self._update_center_error_model(camera_matrix)
         self.get_logger().debug("updated calibration from CameraInfo")
+
+    def _update_center_error_model(self, camera_matrix):
+        if not self.use_camera_model_center_error:
+            self.center_u_reference = None
+            self.center_u_scale = None
+            return
+
+        fx = float(camera_matrix[0, 0])
+        cx = float(camera_matrix[0, 2])
+        if fx <= 0.0 or not math.isfinite(fx) or not math.isfinite(cx):
+            self._warn_throttled("invalid camera model for center error")
+            self.center_u_reference = None
+            self.center_u_scale = None
+            return
+
+        self.center_u_reference = cx
+        self.center_u_scale = fx
 
     def image_callback(self, msg: Image):
         if self.camera_matrix is None or self.dist_coeffs is None:
@@ -223,9 +248,17 @@ class ArucoDistancePublisher(Node):
             marker_corners = corners[i][0]
             center_u = float(np.mean(marker_corners[:, 0]))
             center_v = float(np.mean(marker_corners[:, 1]))
-            normalized_center_error = (
-                center_u - image_width / 2.0
-            ) / (image_width / 2.0)
+            center_u_reference = (
+                self.center_u_reference
+                if self.center_u_reference is not None
+                else image_width / 2.0
+            )
+            center_u_scale = (
+                self.center_u_scale
+                if self.center_u_scale is not None
+                else image_width / 2.0
+            )
+            normalized_center_error = (center_u - center_u_reference) / center_u_scale
 
             self.get_logger().info(
                 f"id={int(marker_id)} x={x_m:.3f} y={y_m:.3f} z={z_m:.3f} "

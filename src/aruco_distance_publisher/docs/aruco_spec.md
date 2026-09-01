@@ -34,17 +34,23 @@ The publisher computes the marker center from the four detected ArUco corner pix
 ```text
 center_u = (u1 + u2 + u3 + u4) / 4
 center_v = (v1 + v2 + v3 + v4) / 4
-normalized_center_error = (center_u - image_width / 2) / (image_width / 2)
+normalized_center_error = (center_u - cx) / fx
 ```
 
 `normalized_center_error` is:
 
-- `0.0` when the marker center is horizontally centered in the image
+- `0.0` when the marker center is at the camera optical center
 - positive when the marker center is to the image-right side
 - negative when the marker center is to the image-left side
-- near `+1.0` or `-1.0` when the marker center is close to the horizontal image edge
+- scaled by camera focal length when camera calibration is available
 
 Downstream controllers use this value to decide whether it is safe to start marker-yaw-based perpendicular alignment without rotating the marker out of view.
+
+When `use_camera_model_center_error=false`, the publisher falls back to the legacy image-width calculation:
+
+```text
+normalized_center_error = (center_u - image_width / 2) / (image_width / 2)
+```
 
 ## Coordinate frame
 - `ArucoDistance` is published in the OpenCV camera coordinate frame as returned by `cv2.aruco.estimatePoseSingleMarkers()`.
