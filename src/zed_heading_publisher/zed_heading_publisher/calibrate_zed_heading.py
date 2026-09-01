@@ -20,7 +20,7 @@ class ZedHeadingCalibrator(Node):
 
         self.declare_parameter('mag_topic', '/zed2i/zed_node/imu/mag')
         self.declare_parameter('duration_sec', 30.0)
-        self.declare_parameter('min_samples', 100)
+        self.declare_parameter('min_samples', 20)
         self.declare_parameter('magnetic_field_scale', 1000000.0)
         axis_descriptor = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter('raw_x_axis', 'y', axis_descriptor)
@@ -169,16 +169,16 @@ class ZedHeadingCalibrator(Node):
         )
 
     def _finish(self):
-        if (
-            self.sample_count < self.min_samples
-            or self.last_raw_x is None
-            or self.last_raw_z is None
-        ):
+        if self.sample_count == 0 or self.last_raw_x is None or self.last_raw_z is None:
             self.get_logger().error(
-                'not enough samples for calibration: samples=%d min_samples=%d'
-                % (self.sample_count, self.min_samples)
+                'no samples received for calibration; check mag_topic and ZED data hub'
             )
             return
+        if self.sample_count < self.min_samples:
+            self.get_logger().warn(
+                'sample count is lower than recommended: samples=%d min_samples=%d'
+                % (self.sample_count, self.min_samples)
+            )
 
         center_x = (self.min_x + self.max_x) / 2.0
         center_z = (self.min_z + self.max_z) / 2.0

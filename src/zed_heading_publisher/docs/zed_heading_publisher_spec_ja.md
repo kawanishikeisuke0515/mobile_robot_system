@@ -195,10 +195,12 @@ ZED wrapper の magnetometer topic に合わせて `center_x`, `center_z`, `zero
 ```bash
 ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
   -p duration_sec:=30.0 \
+  -p min_samples:=20 \
   -p magnetic_field_scale:=1.0
 ```
 
 キャリブレーション中はロボットをその場でゆっくり360度回転させる。終了直前には、ロボット実 yaw = 0 deg としたい向きへ戻す。
+サンプル数が `min_samples` 未満の場合は警告を出すが、1サンプル以上あれば計算結果は出力する。
 
 終了時に `zed_heading_publisher.yaml` へ転記できる形式で以下を標準出力へ表示する。
 
