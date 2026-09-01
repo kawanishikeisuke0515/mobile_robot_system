@@ -8,7 +8,7 @@ zed_heading_publisher:
     frame_id: "zed2i_mag"
     invert_yaw: false
     magnetic_field_scale: 1000000.0
-    raw_x_axis: y
+    raw_x_axis: "y"
     raw_x_sign: -1.0
-    raw_z_axis: x
+    raw_z_axis: "x"
     raw_z_sign: 1.0

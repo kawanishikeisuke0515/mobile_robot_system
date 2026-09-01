@@ -5,6 +5,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument
 from launch.substitutions import LaunchConfiguration
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 
 
 def generate_launch_description():
@@ -51,9 +52,9 @@ def generate_launch_description():
                 str(config_path),
                 {
                     'mag_topic': mag_topic,
-                    'raw_x_axis': raw_x_axis,
+                    'raw_x_axis': ParameterValue(raw_x_axis, value_type=str),
                     'raw_x_sign': raw_x_sign,
-                    'raw_z_axis': raw_z_axis,
+                    'raw_z_axis': ParameterValue(raw_z_axis, value_type=str),
                     'raw_z_sign': raw_z_sign,
                 },
             ],
