@@ -9,6 +9,7 @@ def generate_launch_description():
     image_topic = LaunchConfiguration('image_topic')
     camera_info_topic = LaunchConfiguration('camera_info_topic')
     use_camera_info = LaunchConfiguration('use_camera_info')
+    use_rectified_camera_info = LaunchConfiguration('use_rectified_camera_info')
     marker_length = LaunchConfiguration('marker_length')
     target_z = LaunchConfiguration('target_z')
     kp_z = LaunchConfiguration('kp_z')
@@ -47,6 +48,11 @@ def generate_launch_description():
             'use_camera_info',
             default_value='true',
             description='Use CameraInfo calibration instead of calibration file',
+        ),
+        DeclareLaunchArgument(
+            'use_rectified_camera_info',
+            default_value='true',
+            description='Use CameraInfo projection matrix for rectified image input',
         ),
         DeclareLaunchArgument(
             'marker_length',
@@ -142,6 +148,7 @@ def generate_launch_description():
                 'image_topic': image_topic,
                 'camera_info_topic': camera_info_topic,
                 'use_camera_info': use_camera_info,
+                'use_rectified_camera_info': use_rectified_camera_info,
                 'camera_side': camera_side,
                 'marker_length': marker_length,
             }],

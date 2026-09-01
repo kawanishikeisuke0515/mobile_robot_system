@@ -65,6 +65,7 @@ class ArucoDistancePublisher(Node):
             "/zed2i/zed_node/rgb/color/rect/camera_info",
         )
         self.declare_parameter("use_camera_info", True)
+        self.declare_parameter("use_rectified_camera_info", True)
         self.declare_parameter("camera_side", "left")
         self.declare_parameter("marker_length", 0.168)
 
@@ -72,6 +73,9 @@ class ArucoDistancePublisher(Node):
         self.camera_info_topic = str(self.get_parameter("camera_info_topic").value)
         self.use_camera_info = _get_bool_parameter(
             self.get_parameter("use_camera_info").value
+        )
+        self.use_rectified_camera_info = _get_bool_parameter(
+            self.get_parameter("use_rectified_camera_info").value
         )
         self.camera_side = str(self.get_parameter("camera_side").value)
         self.marker_length = float(self.get_parameter("marker_length").value)
@@ -152,8 +156,14 @@ class ArucoDistancePublisher(Node):
         if not self.use_camera_info:
             return
 
-        camera_matrix = np.array(msg.k, dtype=np.float64).reshape((3, 3))
-        dist_coeffs = np.array(msg.d, dtype=np.float64)
+        if self.use_rectified_camera_info:
+            projection_matrix = np.array(msg.p, dtype=np.float64).reshape((3, 4))
+            camera_matrix = projection_matrix[:3, :3]
+            dist_coeffs = np.zeros((5,), dtype=np.float64)
+        else:
+            camera_matrix = np.array(msg.k, dtype=np.float64).reshape((3, 3))
+            dist_coeffs = np.array(msg.d, dtype=np.float64)
+
         if camera_matrix.shape != (3, 3) or dist_coeffs.size == 0:
             self._warn_throttled("invalid CameraInfo calibration data")
             return

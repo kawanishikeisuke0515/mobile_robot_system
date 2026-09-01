@@ -12,6 +12,9 @@ This package subscribes to a ZED image topic, detects ArUco markers, and publish
 - Subscribes to `/zed2i/zed_node/rgb/color/rect/camera_info`: `sensor_msgs/msg/CameraInfo`
 - `/aruco/distance`: `aruco_interfaces/msg/ArucoDistance`
 
+For rectified image input, the node uses the left 3x3 block of `CameraInfo.p`
+as the camera matrix and uses zero distortion coefficients.
+
 ## Message Fields
 - `id`: detected marker ID
 - `x`: marker translation in the camera frame, positive to the right

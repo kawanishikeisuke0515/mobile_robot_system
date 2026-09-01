@@ -66,6 +66,7 @@ topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapp
 | `image_topic` | `string` | `/zed2i/zed_node/rgb/color/rect/image` | non-empty | ArUco検出に使用するimage topic |
 | `camera_info_topic` | `string` | `/zed2i/zed_node/rgb/color/rect/camera_info` | empty or topic name | CameraInfoをsubscribeする場合のtopic |
 | `use_camera_info` | `bool` | `true` | `true` or `false` | calibration fileではなくCameraInfoを使用する |
+| `use_rectified_camera_info` | `bool` | `true` | `true` or `false` | rectified image用にCameraInfoのprojection matrixを使用する |
 | `camera_side` | `string` | `left` | `left` または `right` | calibration file選択用。side-by-side画像分割には使用しない |
 | `marker_length` | `float` | `0.168` | `> 0.0` | ArUcoマーカー一辺の長さ[m] |
 
@@ -79,7 +80,8 @@ topic名はROS parameterで変更可能とする。初期defaultは、`zed_wrapp
 | PR-004 | `marker_length <= 0.0` の場合、起動時にvalidation errorとすること。 |
 | PR-005 | `use_camera_info == false` の場合、`camera_side` に対応するcamera calibration fileを読み込むこと。 |
 | PR-006 | `use_camera_info == true` の場合、CameraInfoを受信するまでpose推定を行わないこと。 |
-| PR-007 | parameterはlaunch引数またはROS parameterで設定できること。 |
+| PR-007 | `use_rectified_camera_info == true` の場合、CameraInfoの `P` からcamera matrixを取得し、distortion coefficientsはzeroとして扱うこと。 |
+| PR-008 | parameterはlaunch引数またはROS parameterで設定できること。 |
 
 ## 7. State Machine / Control Flow
 
@@ -107,7 +109,7 @@ IMAGE_CALLBACK
 
 | ID | Requirement |
 | --- | --- |
-| CF-001 | node起動時に `image_topic`, `camera_info_topic`, `use_camera_info`, `camera_side`, `marker_length` をvalidateすること。 |
+| CF-001 | node起動時に `image_topic`, `camera_info_topic`, `use_camera_info`, `use_rectified_camera_info`, `camera_side`, `marker_length` をvalidateすること。 |
 | CF-002 | `use_camera_info == false` の場合、`camera_side` に対応する calibration fileをsource treeまたはinstall treeから探索すること。 |
 | CF-003 | `use_camera_info == false` の場合、calibration fileから `cameraMatrix` と `distCoeffs` を読み込むこと。 |
 | CF-004 | `use_camera_info == true` の場合、CameraInfo messageからcamera matrixとdistortion coefficientsを取得すること。 |

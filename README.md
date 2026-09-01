@@ -91,6 +91,7 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
 - Default camera info topic: `/zed2i/zed_node/rgb/color/rect/camera_info`
 - The ZED camera device is opened only by the official `zed_wrapper`.
 - `use_camera_info=true` uses the ZED wrapper `CameraInfo` calibration by default.
+- `use_rectified_camera_info=true` uses `CameraInfo.p` and zero distortion for rectified images.
 - `camera_side` selects the calibration file only when `use_camera_info=false`.
 
 ## ROS2 Output
