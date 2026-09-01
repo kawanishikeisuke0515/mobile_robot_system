@@ -26,6 +26,7 @@ setup(
     entry_points={
         'console_scripts': [
             'zed_heading_publisher = zed_heading_publisher.zed_heading_publisher:main',
+            'calibrate_zed_heading = zed_heading_publisher.calibrate_zed_heading:main',
         ],
     },
 )

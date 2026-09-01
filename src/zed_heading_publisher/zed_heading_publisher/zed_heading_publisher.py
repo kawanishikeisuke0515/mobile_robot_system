@@ -106,6 +106,7 @@ class ZedHeadingPublisher(Node):
         self.declare_parameter('frame_id', 'zed2i_mag')
         self.declare_parameter('invert_yaw', False)
         self.declare_parameter('magnetic_field_scale', 1000000.0)
+        self.declare_parameter('diagnostic_log_interval_sec', 1.0)
         axis_descriptor = ParameterDescriptor(dynamic_typing=True)
         self.declare_parameter('raw_x_axis', 'y', axis_descriptor)
         self.declare_parameter('raw_x_sign', -1.0)
@@ -122,6 +123,9 @@ class ZedHeadingPublisher(Node):
         self.magnetic_field_scale = float(
             self.get_parameter('magnetic_field_scale').value
         )
+        self.diagnostic_log_interval_sec = float(
+            self.get_parameter('diagnostic_log_interval_sec').value
+        )
         self.raw_x_axis = get_axis_parameter(self.get_parameter('raw_x_axis').value)
         self.raw_x_sign = float(self.get_parameter('raw_x_sign').value)
         self.raw_z_axis = get_axis_parameter(self.get_parameter('raw_z_axis').value)
@@ -131,6 +135,7 @@ class ZedHeadingPublisher(Node):
         self.publisher_ = self.create_publisher(ZedHeading, '/zed/heading', 10)
         self.last_sensor_warn_time = None
         self.last_publish_time = None
+        self.last_diagnostic_log_time = None
 
         self.mag_subscription = self.create_subscription(
             MagneticField,
@@ -142,7 +147,8 @@ class ZedHeadingPublisher(Node):
         self.get_logger().info(
             'mag_topic=%s center_x=%.5f center_z=%.5f zero_heading_deg=%.5f '
             'publish_rate_hz=%.3f frame_id=%s invert_yaw=%s '
-            'magnetic_field_scale=%.5f raw_x=%+.1f*%s raw_z=%+.1f*%s'
+            'magnetic_field_scale=%.5f diagnostic_log_interval_sec=%.3f '
+            'raw_x=%+.1f*%s raw_z=%+.1f*%s'
             % (
                 self.mag_topic,
                 self.center_x,
@@ -152,6 +158,7 @@ class ZedHeadingPublisher(Node):
                 self.frame_id,
                 self.invert_yaw,
                 self.magnetic_field_scale,
+                self.diagnostic_log_interval_sec,
                 self.raw_x_sign,
                 self.raw_x_axis,
                 self.raw_z_sign,
@@ -173,6 +180,13 @@ class ZedHeadingPublisher(Node):
             raise ValueError('frame_id must not be empty')
         if not math.isfinite(self.magnetic_field_scale):
             raise ValueError('magnetic_field_scale must be finite')
+        if (
+            self.diagnostic_log_interval_sec < 0.0
+            or not math.isfinite(self.diagnostic_log_interval_sec)
+        ):
+            raise ValueError(
+                'diagnostic_log_interval_sec must be a finite value greater than or equal to 0'
+            )
         if self.raw_x_axis not in ('x', 'y', 'z'):
             raise ValueError("raw_x_axis must be one of 'x', 'y', or 'z'")
         if self.raw_z_axis not in ('x', 'y', 'z'):
@@ -211,6 +225,7 @@ class ZedHeadingPublisher(Node):
             zero_heading_deg=self.zero_heading_deg,
             invert_yaw=self.invert_yaw,
         )
+        self._log_diagnostic_sample(msg, sample)
         self.publisher_.publish(self._build_message(sample))
         self.last_publish_time = self.get_clock().now()
 
@@ -235,6 +250,37 @@ class ZedHeadingPublisher(Node):
         msg.robot_yaw_rad = sample.robot_yaw_rad
         msg.valid = True
         return msg
+
+    def _log_diagnostic_sample(
+        self,
+        source_msg: MagneticField,
+        sample: HeadingSample,
+    ):
+        if self.diagnostic_log_interval_sec <= 0.0:
+            return
+
+        now = self.get_clock().now()
+        if self.last_diagnostic_log_time is not None:
+            elapsed = (now - self.last_diagnostic_log_time).nanoseconds / 1e9
+            if elapsed < self.diagnostic_log_interval_sec:
+                return
+
+        self.last_diagnostic_log_time = now
+        field = source_msg.magnetic_field
+        self.get_logger().info(
+            'mag_sensor=(x=%.8g y=%.8g z=%.8g) mapped=(raw_x=%.5f raw_z=%.5f) '
+            'corrected=(x=%.5f z=%.5f) robot_yaw_deg=%.3f'
+            % (
+                float(field.x),
+                float(field.y),
+                float(field.z),
+                sample.raw_x,
+                sample.raw_z,
+                sample.corrected_x,
+                sample.corrected_z,
+                sample.robot_yaw_deg,
+            )
+        )
 
     def _warn_throttled(self, message: str, interval_sec: float = 2.0):
         now = self.get_clock().now()

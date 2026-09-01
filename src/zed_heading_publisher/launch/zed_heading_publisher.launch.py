@@ -16,6 +16,8 @@ def generate_launch_description():
     raw_x_sign = LaunchConfiguration('raw_x_sign')
     raw_z_axis = LaunchConfiguration('raw_z_axis')
     raw_z_sign = LaunchConfiguration('raw_z_sign')
+    magnetic_field_scale = LaunchConfiguration('magnetic_field_scale')
+    diagnostic_log_interval_sec = LaunchConfiguration('diagnostic_log_interval_sec')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -43,6 +45,16 @@ def generate_launch_description():
             default_value='1.0',
             description='Sign applied to raw_z_axis.',
         ),
+        DeclareLaunchArgument(
+            'magnetic_field_scale',
+            default_value='1000000.0',
+            description='Scale applied to MagneticField values before heading calculation.',
+        ),
+        DeclareLaunchArgument(
+            'diagnostic_log_interval_sec',
+            default_value='1.0',
+            description='Interval for heading diagnostic logs; 0 disables logs.',
+        ),
         Node(
             package='zed_heading_publisher',
             executable='zed_heading_publisher',
@@ -56,6 +68,8 @@ def generate_launch_description():
                     'raw_x_sign': raw_x_sign,
                     'raw_z_axis': ParameterValue(raw_z_axis, value_type=str),
                     'raw_z_sign': raw_z_sign,
+                    'magnetic_field_scale': magnetic_field_scale,
+                    'diagnostic_log_interval_sec': diagnostic_log_interval_sec,
                 },
             ],
         ),

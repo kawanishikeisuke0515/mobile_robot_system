@@ -99,6 +99,9 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
 - `zed_heading_publisher` subscribes to `/zed2i/zed_node/imu/mag`.
 - The default wrapper-axis mapping is `raw_x=-mag.y`, `raw_z=mag.x`.
 - For legacy comparison, launch with `raw_x_axis:=x raw_x_sign:=1.0 raw_z_axis:=z raw_z_sign:=1.0`.
+- Recalibrate after changing the ZED heading input path:
+  `ros2 run zed_heading_publisher calibrate_zed_heading --ros-args -p duration_sec:=30.0 -p magnetic_field_scale:=1.0`
+- Use `magnetic_field_scale:=1.0` when `/imu/mag` is already in microtesla-like units, or `1000000.0` when it is in Tesla.
 
 ## ROS2 Output
 - Publish topic: /aruco/distance

@@ -145,6 +145,7 @@ bool valid
 | `frame_id` | `string` | `zed2i_mag` | non-empty | message header の frame id |
 | `invert_yaw` | `bool` | `false` | `true` or `false` | yaw 符号反転が必要な場合に使用する |
 | `magnetic_field_scale` | `double` | `1000000.0` | finite value | `sensor_msgs/msg/MagneticField` の Tesla 値を microtesla 相当へ変換するscale |
+| `diagnostic_log_interval_sec` | `double` | `1.0` | `>= 0.0` | 磁気センサ値、scale後raw値、補正後値、yawを診断logに出す周期。`0.0` で無効 |
 | `raw_x_axis` | `string` | `y` | `x`, `y`, `z` | `raw_x` に使用する `MagneticField` 軸 |
 | `raw_x_sign` | `double` | `-1.0` | finite non-zero | `raw_x_axis` に掛ける符号 |
 | `raw_z_axis` | `string` | `x` | `x`, `y`, `z` | `raw_z` に使用する `MagneticField` 軸 |
@@ -158,11 +159,12 @@ bool valid
 | PR-002 | `center_x`, `center_z`, `zero_heading_deg` は source code 固定値ではなく ROS parameter から設定できること。 |
 | PR-003 | `publish_rate_hz <= 0.0` の場合、起動時に validation error とすること。 |
 | PR-004 | `frame_id` が空文字の場合、起動時に validation error とすること。 |
-| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale`, `raw_x_sign`, `raw_z_sign` が finite value でない場合、起動時に validation error とすること。 |
-| PR-006 | `raw_x_axis`, `raw_z_axis` が `x`, `y`, `z` 以外の場合、起動時に validation error とすること。 |
-| PR-007 | `raw_x_sign`, `raw_z_sign` が `0.0` の場合、起動時に validation error とすること。 |
-| PR-008 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale`, raw axis mapping を出力すること。 |
-| PR-009 | parameter は launch 引数または YAML から設定できること。 |
+| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, `raw_x_sign`, `raw_z_sign` が finite value でない場合、起動時に validation error とすること。 |
+| PR-006 | `diagnostic_log_interval_sec < 0.0` の場合、起動時に validation error とすること。 |
+| PR-007 | `raw_x_axis`, `raw_z_axis` が `x`, `y`, `z` 以外の場合、起動時に validation error とすること。 |
+| PR-008 | `raw_x_sign`, `raw_z_sign` が `0.0` の場合、起動時に validation error とすること。 |
+| PR-009 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, raw axis mapping を出力すること。 |
+| PR-010 | parameter は launch 引数または YAML から設定できること。 |
 
 ### 7.2 YAML Example
 
@@ -177,6 +179,7 @@ zed_heading_publisher:
     frame_id: zed2i_mag
     invert_yaw: false
     magnetic_field_scale: 1000000.0
+    diagnostic_log_interval_sec: 1.0
     raw_x_axis: "y"
     raw_x_sign: -1.0
     raw_z_axis: "x"
@@ -185,7 +188,29 @@ zed_heading_publisher:
 
 ## 8. 角度定義
 
-### 8.1 Coordinate Selection
+### 8.1 Calibration Tool
+
+ZED wrapper の magnetometer topic に合わせて `center_x`, `center_z`, `zero_heading_deg` を取り直すため、以下の実行ファイルを提供する。
+
+```bash
+ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
+  -p duration_sec:=30.0 \
+  -p magnetic_field_scale:=1.0
+```
+
+キャリブレーション中はロボットをその場でゆっくり360度回転させる。終了直前には、ロボット実 yaw = 0 deg としたい向きへ戻す。
+
+終了時に `zed_heading_publisher.yaml` へ転記できる形式で以下を標準出力へ表示する。
+
+```yaml
+zed_heading_publisher:
+  ros__parameters:
+    center_x: ...
+    center_z: ...
+    zero_heading_deg: ...
+```
+
+### 8.2 Coordinate Selection
 
 `sensor_msgs/msg/MagneticField` から、旧SDK直読み実装で使っていた `raw_x`（ロボット右方向相当）と `raw_z`（ロボット前方向相当）を作る。
 
@@ -207,7 +232,7 @@ raw_z_axis = z
 raw_z_sign = 1.0
 ```
 
-### 8.2 Hard-Iron Correction
+### 8.3 Hard-Iron Correction
 
 360 度回転データから求めた磁場中心を引く。
 
@@ -216,7 +241,7 @@ corrected_x = raw_x - center_x
 corrected_z = raw_z - center_z
 ```
 
-### 8.3 Magnetic Heading
+### 8.4 Magnetic Heading
 
 補正後の X-Z 平面から磁気角を算出する。
 
@@ -231,7 +256,7 @@ magnetic_heading_deg = normalize_to_180(magnetic_heading_deg)
 [-180, 180)
 ```
 
-### 8.4 Robot Yaw
+### 8.5 Robot Yaw
 
 ロボット実 yaw = 0 deg のときに計測した磁気角 `zero_heading_deg` を引く。
 
@@ -253,7 +278,7 @@ rad 値は以下で算出する。
 robot_yaw_rad = radians(robot_yaw_deg)
 ```
 
-### 8.5 Positive Direction
+### 8.6 Positive Direction
 
 ロボットが左旋回したときに `robot_yaw_deg` と `robot_yaw_rad` が増加する向きを正方向とする。
 
