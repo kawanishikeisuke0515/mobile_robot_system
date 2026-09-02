@@ -102,6 +102,8 @@ ros2 run teleop_twist_keyboard teleop_twist_keyboard --ros-args --remap cmd_vel:
 - Recalibrate after changing the ZED heading input path:
   `ros2 run zed_heading_publisher calibrate_zed_heading --ros-args -p duration_sec:=30.0 -p magnetic_field_scale:=1.0`
 - Use `magnetic_field_scale:=1.0` when `/imu/mag` is already in microtesla-like units, or `1000000.0` when it is in Tesla.
+- Compare MAG yaw with ZED VIO odometry yaw:
+  `ros2 run zed_heading_publisher compare_vio_heading --ros-args -p csv_path:=/tmp/zed_vio_mag_compare.csv`
 
 ## ROS2 Output
 - Publish topic: /aruco/distance

@@ -212,7 +212,35 @@ zed_heading_publisher:
     zero_heading_deg: ...
 ```
 
-### 8.2 Coordinate Selection
+### 8.2 VIO/MAG Heading Comparison Tool
+
+ZED wrapper のVIO yawと、magnetometer由来の `/zed/heading` yawを比較するため、以下の実行ファイルを提供する。
+
+```bash
+ros2 run zed_heading_publisher compare_vio_heading --ros-args \
+  -p heading_topic:=/zed/heading \
+  -p odom_topic:=/zed2i/zed_node/odom \
+  -p csv_path:=/tmp/zed_vio_mag_compare.csv
+```
+
+このツールは `zed_interfaces/msg/ZedHeading` と `nav_msgs/msg/Odometry` をsubscribeし、初回に受信できた両yawをゼロ基準として、以後の相対yawを比較する。
+
+CSVには以下を出力する。
+
+```text
+time_sec
+mag_stamp_sec
+vio_stamp_sec
+mag_yaw_deg
+vio_yaw_deg
+mag_relative_yaw_deg
+vio_relative_yaw_deg
+yaw_diff_deg
+mag_age_sec
+vio_age_sec
+```
+
+### 8.3 Coordinate Selection
 
 `sensor_msgs/msg/MagneticField` から、旧SDK直読み実装で使っていた `raw_x`（ロボット右方向相当）と `raw_z`（ロボット前方向相当）を作る。
 
@@ -234,7 +262,7 @@ raw_z_axis = z
 raw_z_sign = 1.0
 ```
 
-### 8.3 Hard-Iron Correction
+### 8.4 Hard-Iron Correction
 
 360 度回転データから求めた磁場中心を引く。
 
@@ -243,7 +271,7 @@ corrected_x = raw_x - center_x
 corrected_z = raw_z - center_z
 ```
 
-### 8.4 Magnetic Heading
+### 8.5 Magnetic Heading
 
 補正後の X-Z 平面から磁気角を算出する。
 
@@ -258,7 +286,7 @@ magnetic_heading_deg = normalize_to_180(magnetic_heading_deg)
 [-180, 180)
 ```
 
-### 8.5 Robot Yaw
+### 8.6 Robot Yaw
 
 ロボット実 yaw = 0 deg のときに計測した磁気角 `zero_heading_deg` を引く。
 
@@ -280,7 +308,7 @@ rad 値は以下で算出する。
 robot_yaw_rad = radians(robot_yaw_deg)
 ```
 
-### 8.6 Positive Direction
+### 8.7 Positive Direction
 
 ロボットが左旋回したときに `robot_yaw_deg` と `robot_yaw_rad` が増加する向きを正方向とする。
 
