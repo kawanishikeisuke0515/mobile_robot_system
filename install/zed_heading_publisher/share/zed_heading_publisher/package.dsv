@@ -1,0 +1,9 @@
+source;share/zed_heading_publisher/hook/pythonpath.ps1
+source;share/zed_heading_publisher/hook/pythonpath.dsv
+source;share/zed_heading_publisher/hook/pythonpath.sh
+source;share/zed_heading_publisher/hook/ament_prefix_path.ps1
+source;share/zed_heading_publisher/hook/ament_prefix_path.dsv
+source;share/zed_heading_publisher/hook/ament_prefix_path.sh
+source;../../build/zed_heading_publisher/share/zed_heading_publisher/hook/pythonpath_develop.ps1
+source;../../build/zed_heading_publisher/share/zed_heading_publisher/hook/pythonpath_develop.dsv
+source;../../build/zed_heading_publisher/share/zed_heading_publisher/hook/pythonpath_develop.sh

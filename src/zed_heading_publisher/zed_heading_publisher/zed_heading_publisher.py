@@ -1,10 +1,10 @@
+from dataclasses import dataclass
 import math
 import os
-from dataclasses import dataclass
 from typing import Optional
 
-import rclpy
 from rcl_interfaces.msg import ParameterDescriptor
+import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from sensor_msgs.msg import MagneticField
@@ -33,9 +33,15 @@ def calculate_heading(
     center_z: float,
     zero_heading_deg: float,
     invert_yaw: bool = False,
+    soft_iron_matrix_00: float = 1.0,
+    soft_iron_matrix_01: float = 0.0,
+    soft_iron_matrix_10: float = 0.0,
+    soft_iron_matrix_11: float = 1.0,
 ) -> HeadingSample:
-    corrected_x = raw_x - center_x
-    corrected_z = raw_z - center_z
+    shifted_x = raw_x - center_x
+    shifted_z = raw_z - center_z
+    corrected_x = soft_iron_matrix_00 * shifted_x + soft_iron_matrix_01 * shifted_z
+    corrected_z = soft_iron_matrix_10 * shifted_x + soft_iron_matrix_11 * shifted_z
 
     magnetic_heading_deg = normalize_to_180(
         math.degrees(math.atan2(corrected_x, corrected_z))
@@ -87,11 +93,11 @@ def get_axis_parameter(value) -> str:
     if isinstance(value, bool):
         if value:
             return 'y'
-        raise ValueError("bool false is not a valid magnetic field axis")
+        raise ValueError('bool false is not a valid magnetic field axis')
     axis = str(value).strip().lower()
     if axis in ('x', 'y', 'z'):
         return axis
-    raise ValueError(f"axis parameter must be one of 'x', 'y', or 'z': {value}")
+    raise ValueError(f'axis parameter must be one of x, y, or z: {value}')
 
 
 class ZedHeadingPublisher(Node):
@@ -112,6 +118,10 @@ class ZedHeadingPublisher(Node):
         self.declare_parameter('raw_x_sign', -1.0)
         self.declare_parameter('raw_z_axis', 'x', axis_descriptor)
         self.declare_parameter('raw_z_sign', 1.0)
+        self.declare_parameter('soft_iron_matrix_00', 1.0)
+        self.declare_parameter('soft_iron_matrix_01', 0.0)
+        self.declare_parameter('soft_iron_matrix_10', 0.0)
+        self.declare_parameter('soft_iron_matrix_11', 1.0)
 
         self.mag_topic = str(self.get_parameter('mag_topic').value)
         self.center_x = float(self.get_parameter('center_x').value)
@@ -130,6 +140,18 @@ class ZedHeadingPublisher(Node):
         self.raw_x_sign = float(self.get_parameter('raw_x_sign').value)
         self.raw_z_axis = get_axis_parameter(self.get_parameter('raw_z_axis').value)
         self.raw_z_sign = float(self.get_parameter('raw_z_sign').value)
+        self.soft_iron_matrix_00 = float(
+            self.get_parameter('soft_iron_matrix_00').value
+        )
+        self.soft_iron_matrix_01 = float(
+            self.get_parameter('soft_iron_matrix_01').value
+        )
+        self.soft_iron_matrix_10 = float(
+            self.get_parameter('soft_iron_matrix_10').value
+        )
+        self.soft_iron_matrix_11 = float(
+            self.get_parameter('soft_iron_matrix_11').value
+        )
         self._validate_parameters()
 
         self.publisher_ = self.create_publisher(ZedHeading, '/zed/heading', 10)
@@ -148,7 +170,8 @@ class ZedHeadingPublisher(Node):
             'mag_topic=%s center_x=%.5f center_z=%.5f zero_heading_deg=%.5f '
             'publish_rate_hz=%.3f frame_id=%s invert_yaw=%s '
             'magnetic_field_scale=%.5f diagnostic_log_interval_sec=%.3f '
-            'raw_x=%+.1f*%s raw_z=%+.1f*%s'
+            'raw_x=%+.1f*%s raw_z=%+.1f*%s '
+            'soft_iron=[[%.6f, %.6f], [%.6f, %.6f]]'
             % (
                 self.mag_topic,
                 self.center_x,
@@ -163,6 +186,10 @@ class ZedHeadingPublisher(Node):
                 self.raw_x_axis,
                 self.raw_z_sign,
                 self.raw_z_axis,
+                self.soft_iron_matrix_00,
+                self.soft_iron_matrix_01,
+                self.soft_iron_matrix_10,
+                self.soft_iron_matrix_11,
             )
         )
         self.get_logger().info('publishing ZED2i heading on /zed/heading')
@@ -195,6 +222,13 @@ class ZedHeadingPublisher(Node):
             raise ValueError('raw_x_sign and raw_z_sign must be finite')
         if self.raw_x_sign == 0.0 or self.raw_z_sign == 0.0:
             raise ValueError('raw_x_sign and raw_z_sign must be non-zero')
+        if not is_finite(
+            self.soft_iron_matrix_00,
+            self.soft_iron_matrix_01,
+            self.soft_iron_matrix_10,
+            self.soft_iron_matrix_11,
+        ):
+            raise ValueError('soft-iron matrix parameters must be finite')
 
     def mag_callback(self, msg: MagneticField):
         if not self._should_publish():
@@ -224,6 +258,10 @@ class ZedHeadingPublisher(Node):
             center_z=self.center_z,
             zero_heading_deg=self.zero_heading_deg,
             invert_yaw=self.invert_yaw,
+            soft_iron_matrix_00=self.soft_iron_matrix_00,
+            soft_iron_matrix_01=self.soft_iron_matrix_01,
+            soft_iron_matrix_10=self.soft_iron_matrix_10,
+            soft_iron_matrix_11=self.soft_iron_matrix_11,
         )
         self._log_diagnostic_sample(msg, sample)
         self.publisher_.publish(self._build_message(sample))
@@ -291,6 +329,7 @@ class ZedHeadingPublisher(Node):
 
         self.last_sensor_warn_time = now
         self.get_logger().warn(message)
+
 
 def main(args: Optional[list] = None):
     os.environ.setdefault('ROS_AUTOMATIC_DISCOVERY_RANGE', 'LOCALHOST')

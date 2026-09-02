@@ -1,0 +1,6 @@
+{
+  "package_name": "zed_interfaces",
+  "non_idl_tuples": [
+    "/home/keisuke-kawanishi/robotics/public/mobile_robot_system/src/zed_interfaces:msg/ZedHeading.msg"
+  ]
+}

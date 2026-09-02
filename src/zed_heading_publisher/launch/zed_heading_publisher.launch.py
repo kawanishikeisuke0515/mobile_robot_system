@@ -18,6 +18,10 @@ def generate_launch_description():
     raw_z_sign = LaunchConfiguration('raw_z_sign')
     magnetic_field_scale = LaunchConfiguration('magnetic_field_scale')
     diagnostic_log_interval_sec = LaunchConfiguration('diagnostic_log_interval_sec')
+    soft_iron_matrix_00 = LaunchConfiguration('soft_iron_matrix_00')
+    soft_iron_matrix_01 = LaunchConfiguration('soft_iron_matrix_01')
+    soft_iron_matrix_10 = LaunchConfiguration('soft_iron_matrix_10')
+    soft_iron_matrix_11 = LaunchConfiguration('soft_iron_matrix_11')
 
     return LaunchDescription([
         DeclareLaunchArgument(
@@ -55,6 +59,26 @@ def generate_launch_description():
             default_value='1.0',
             description='Interval for heading diagnostic logs; 0 disables logs.',
         ),
+        DeclareLaunchArgument(
+            'soft_iron_matrix_00',
+            default_value='1.0',
+            description='Soft-iron correction matrix row 0 column 0.',
+        ),
+        DeclareLaunchArgument(
+            'soft_iron_matrix_01',
+            default_value='0.0',
+            description='Soft-iron correction matrix row 0 column 1.',
+        ),
+        DeclareLaunchArgument(
+            'soft_iron_matrix_10',
+            default_value='0.0',
+            description='Soft-iron correction matrix row 1 column 0.',
+        ),
+        DeclareLaunchArgument(
+            'soft_iron_matrix_11',
+            default_value='1.0',
+            description='Soft-iron correction matrix row 1 column 1.',
+        ),
         Node(
             package='zed_heading_publisher',
             executable='zed_heading_publisher',
@@ -70,6 +94,10 @@ def generate_launch_description():
                     'raw_z_sign': raw_z_sign,
                     'magnetic_field_scale': magnetic_field_scale,
                     'diagnostic_log_interval_sec': diagnostic_log_interval_sec,
+                    'soft_iron_matrix_00': soft_iron_matrix_00,
+                    'soft_iron_matrix_01': soft_iron_matrix_01,
+                    'soft_iron_matrix_10': soft_iron_matrix_10,
+                    'soft_iron_matrix_11': soft_iron_matrix_11,
                 },
             ],
         ),

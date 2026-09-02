@@ -1,0 +1,7 @@
+Metadata-Version: 2.1
+Name: zed-heading-publisher
+Version: 0.0.0
+Summary: ZED2i magnetometer topic subscriber and ROS 2 heading publisher
+Maintainer: user
+Maintainer-email: user@example.com
+License: Apache-2.0

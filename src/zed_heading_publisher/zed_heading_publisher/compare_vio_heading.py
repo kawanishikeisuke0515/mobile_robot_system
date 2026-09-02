@@ -4,8 +4,8 @@ import os
 from pathlib import Path
 from typing import Optional
 
-import rclpy
 from nav_msgs.msg import Odometry
+import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
 from rclpy.time import Time

@@ -190,17 +190,31 @@ zed_heading_publisher:
 
 ### 8.1 Calibration Tool
 
-ZED wrapper の magnetometer topic に合わせて `center_x`, `center_z`, `zero_heading_deg` を取り直すため、以下の実行ファイルを提供する。
+ZED wrapper の magnetometer topic に合わせて `center_x`, `center_z`, `zero_heading_deg` と soft-iron 補正行列を取り直すため、以下の実行ファイルを提供する。
 
 ```bash
 ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
   -p duration_sec:=30.0 \
-  -p min_samples:=20 \
-  -p magnetic_field_scale:=1.0
+  -p min_samples:=20
 ```
 
 キャリブレーション中はロボットをその場でゆっくり360度回転させる。終了直前には、ロボット実 yaw = 0 deg としたい向きへ戻す。
 サンプル数が `min_samples` 未満の場合は警告を出すが、1サンプル以上あれば計算結果は出力する。
+
+`sample_csv_path` を指定すると、収集した `raw_x`, `raw_z` sample を CSV として保存する。
+
+```bash
+ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
+  -p duration_sec:=30.0 \
+  -p sample_csv_path:=/tmp/zed_heading_samples.csv
+```
+
+`input_csv_path` を指定すると、ROS topic から収集せず、CSV の `raw_x`, `raw_z` column から同じ補正値を再計算する。
+
+```bash
+ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
+  -p input_csv_path:=/tmp/zed_heading_samples.csv
+```
 
 終了時に `zed_heading_publisher.yaml` へ転記できる形式で以下を標準出力へ表示する。
 
@@ -209,6 +223,10 @@ zed_heading_publisher:
   ros__parameters:
     center_x: ...
     center_z: ...
+    soft_iron_matrix_00: ...
+    soft_iron_matrix_01: ...
+    soft_iron_matrix_10: ...
+    soft_iron_matrix_11: ...
     zero_heading_deg: ...
 ```
 
@@ -264,12 +282,17 @@ raw_z_sign = 1.0
 
 ### 8.4 Hard-Iron Correction
 
-360 度回転データから求めた磁場中心を引く。
+360 度回転データから求めた磁場中心を引き、soft-iron 補正行列を適用する。
 
 ```text
-corrected_x = raw_x - center_x
-corrected_z = raw_z - center_z
+shifted_x = raw_x - center_x
+shifted_z = raw_z - center_z
+
+corrected_x = soft_iron_matrix_00 * shifted_x + soft_iron_matrix_01 * shifted_z
+corrected_z = soft_iron_matrix_10 * shifted_x + soft_iron_matrix_11 * shifted_z
 ```
+
+soft-iron 補正行列の default は単位行列であり、未設定時は従来の hard-iron 補正のみと同じ挙動になる。
 
 ### 8.5 Magnetic Heading
 
