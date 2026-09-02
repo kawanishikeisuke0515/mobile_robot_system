@@ -1,1 +1,0 @@
-/home/keisuke-kawanishi/robotics/public/mobile_robot_system/build/zed_heading_publisher/launch/zed_heading_publisher.launch.py

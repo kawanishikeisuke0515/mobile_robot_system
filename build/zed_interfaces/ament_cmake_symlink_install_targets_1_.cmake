@@ -1,1 +1,0 @@
-ament_cmake_symlink_install_targets("TARGET_FILES" "/home/keisuke-kawanishi/robotics/public/mobile_robot_system/build/zed_interfaces/rosidl_generator_py/zed_interfaces/zed_interfaces_s__rosidl_typesupport_introspection_c.so" "TARGETS" "zed_interfaces_s__rosidl_typesupport_introspection_c" "DESTINATION" "lib/python3.12/site-packages/zed_interfaces")

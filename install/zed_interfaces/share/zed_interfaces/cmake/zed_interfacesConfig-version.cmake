@@ -1,1 +1,0 @@
-/home/keisuke-kawanishi/robotics/public/mobile_robot_system/build/zed_interfaces/ament_cmake_core/zed_interfacesConfig-version.cmake
