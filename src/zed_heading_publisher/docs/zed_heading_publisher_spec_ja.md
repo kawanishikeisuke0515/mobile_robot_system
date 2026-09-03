@@ -140,6 +140,10 @@ bool valid
 | `mag_topic` | `string` | `/zed2i/zed_node/imu/mag` | non-empty | subscribe する magnetometer topic |
 | `center_x` | `double` | `-0.629279` | finite value | 360 度回転データから求めた磁場中心 X |
 | `center_z` | `double` | `-0.874388` | finite value | 360 度回転データから求めた磁場中心 Z |
+| `soft_iron_matrix_00` | `double` | `1.0` | finite value | soft-iron 補正行列 row 0 column 0 |
+| `soft_iron_matrix_01` | `double` | `0.0` | finite value | soft-iron 補正行列 row 0 column 1 |
+| `soft_iron_matrix_10` | `double` | `0.0` | finite value | soft-iron 補正行列 row 1 column 0 |
+| `soft_iron_matrix_11` | `double` | `1.0` | finite value | soft-iron 補正行列 row 1 column 1 |
 | `zero_heading_deg` | `double` | `39.7` | finite value | ロボット実 yaw = 0 deg のときの磁気角 |
 | `publish_rate_hz` | `double` | `20.0` | `> 0.0` | `/zed/heading` の最大 publish rate |
 | `frame_id` | `string` | `zed2i_mag` | non-empty | message header の frame id |
@@ -159,11 +163,11 @@ bool valid
 | PR-002 | `center_x`, `center_z`, `zero_heading_deg` は source code 固定値ではなく ROS parameter から設定できること。 |
 | PR-003 | `publish_rate_hz <= 0.0` の場合、起動時に validation error とすること。 |
 | PR-004 | `frame_id` が空文字の場合、起動時に validation error とすること。 |
-| PR-005 | `center_x`, `center_z`, `zero_heading_deg`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, `raw_x_sign`, `raw_z_sign` が finite value でない場合、起動時に validation error とすること。 |
+| PR-005 | `center_x`, `center_z`, `soft_iron_matrix_00`, `soft_iron_matrix_01`, `soft_iron_matrix_10`, `soft_iron_matrix_11`, `zero_heading_deg`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, `raw_x_sign`, `raw_z_sign` が finite value でない場合、起動時に validation error とすること。 |
 | PR-006 | `diagnostic_log_interval_sec < 0.0` の場合、起動時に validation error とすること。 |
 | PR-007 | `raw_x_axis`, `raw_z_axis` が `x`, `y`, `z` 以外の場合、起動時に validation error とすること。 |
 | PR-008 | `raw_x_sign`, `raw_z_sign` が `0.0` の場合、起動時に validation error とすること。 |
-| PR-009 | 起動時 log に `mag_topic`, `center_x`, `center_z`, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, raw axis mapping を出力すること。 |
+| PR-009 | 起動時 log に `mag_topic`, `center_x`, `center_z`, soft-iron 補正行列, `zero_heading_deg`, `publish_rate_hz`, `frame_id`, `invert_yaw`, `magnetic_field_scale`, `diagnostic_log_interval_sec`, raw axis mapping を出力すること。 |
 | PR-010 | parameter は launch 引数または YAML から設定できること。 |
 
 ### 7.2 YAML Example
@@ -193,23 +197,33 @@ zed_heading_publisher:
 ZED wrapper の magnetometer topic に合わせて `center_x`, `center_z`, `zero_heading_deg` と soft-iron 補正行列を取り直すため、以下の実行ファイルを提供する。
 
 ```bash
-ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
-  -p duration_sec:=30.0 \
-  -p min_samples:=20
+ros2 run zed_heading_publisher calibrate_zed_heading
 ```
 
-キャリブレーション中はロボットをその場でゆっくり360度回転させる。終了直前には、ロボット実 yaw = 0 deg としたい向きへ戻す。
+default では ZED VIO odometry topic を使用し、キャリブレーション開始時の VIO yaw をロボット実 yaw = 0 deg として扱う。キャリブレーション中はロボットをその場でゆっくり1回転させる。VIO の累積回転量が `target_rotation_deg` 以上になり、かつ角度 bin の coverage が `min_bin_coverage_ratio` 以上になった時点で自動終了する。
+
+MAG の最初の有効 sample を yaw 0 deg 基準 sample として保持し、soft-iron 補正値を求めたあと、その sample から `zero_heading_deg` を計算する。したがって終了直前に yaw 0 deg へ戻す必要はない。
+
+VIO を使わない従来の時間ベース収集を使う場合は以下のように指定する。
+
+```bash
+ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
+  -p use_vio_turn_detection:=false \
+  -p duration_sec:=30.0
+```
+
+VIO mode では `max_duration_sec` を安全 timeout として使用する。timeout 時点でも sample があれば計算結果を出力するが、log と diagnostics で `finish_reason` を確認すること。
+
 サンプル数が `min_samples` 未満の場合は警告を出すが、1サンプル以上あれば計算結果は出力する。
 
 `sample_csv_path` を指定すると、収集した `raw_x`, `raw_z` sample を CSV として保存する。
 
 ```bash
 ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \
-  -p duration_sec:=30.0 \
   -p sample_csv_path:=/tmp/zed_heading_samples.csv
 ```
 
-`input_csv_path` を指定すると、ROS topic から収集せず、CSV の `raw_x`, `raw_z` column から同じ補正値を再計算する。
+`input_csv_path` を指定すると、ROS topic から収集せず、CSV の `raw_x`, `raw_z` column から同じ補正値を再計算する。この場合、CSV の先頭 sample を yaw 0 deg 基準 sample として扱う。
 
 ```bash
 ros2 run zed_heading_publisher calibrate_zed_heading --ros-args \

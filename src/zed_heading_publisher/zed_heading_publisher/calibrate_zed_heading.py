@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from nav_msgs.msg import Odometry
 from rcl_interfaces.msg import ParameterDescriptor
 import rclpy
 from rclpy.node import Node
@@ -14,7 +15,9 @@ from sensor_msgs.msg import MagneticField
 from .zed_heading_publisher import calculate_heading
 from .zed_heading_publisher import get_axis_parameter
 from .zed_heading_publisher import get_axis_value
+from .zed_heading_publisher import get_bool_parameter
 from .zed_heading_publisher import is_finite
+from .zed_heading_publisher import normalize_to_180
 
 
 @dataclass(frozen=True)
@@ -35,6 +38,14 @@ class SoftIronCalibration:
         if self.covariance_minor == 0.0:
             return math.inf
         return self.covariance_major / self.covariance_minor
+
+
+@dataclass(frozen=True)
+class CalibrationSample:
+    stamp_sec: float
+    raw_x: float
+    raw_z: float
+    accumulated_vio_yaw_deg: Optional[float] = None
 
 
 def _normalize_vector(x_value: float, z_value: float) -> tuple[float, float]:
@@ -133,8 +144,14 @@ def estimate_soft_iron_calibration(
     )
 
 
-def read_raw_samples_csv(csv_path: Path) -> list[tuple[float, float]]:
-    samples: list[tuple[float, float]] = []
+def _optional_float(value: Optional[str]) -> Optional[float]:
+    if value is None or value == '':
+        return None
+    return float(value)
+
+
+def read_calibration_samples_csv(csv_path: Path) -> list[CalibrationSample]:
+    samples: list[CalibrationSample] = []
     with csv_path.open(newline='') as csv_file:
         reader = csv.DictReader(csv_file)
         if reader.fieldnames is None:
@@ -145,12 +162,39 @@ def read_raw_samples_csv(csv_path: Path) -> list[tuple[float, float]]:
                 'CSV file must contain raw_x and raw_z columns: missing %s'
                 % ', '.join(sorted(missing_fields))
             )
-        for row in reader:
+        for index, row in enumerate(reader):
             raw_x = float(row['raw_x'])
             raw_z = float(row['raw_z'])
             if is_finite(raw_x, raw_z):
-                samples.append((raw_x, raw_z))
+                stamp_sec = _optional_float(row.get('stamp_sec'))
+                accumulated_yaw = _optional_float(row.get('accumulated_vio_yaw_deg'))
+                samples.append(
+                    CalibrationSample(
+                        float(index) if stamp_sec is None else stamp_sec,
+                        raw_x,
+                        raw_z,
+                        accumulated_yaw,
+                    )
+                )
     return samples
+
+
+def read_raw_samples_csv(csv_path: Path) -> list[tuple[float, float]]:
+    return [
+        (sample.raw_x, sample.raw_z)
+        for sample in read_calibration_samples_csv(csv_path)
+    ]
+
+
+def quaternion_to_yaw_rad(x: float, y: float, z: float, w: float) -> float:
+    siny_cosp = 2.0 * (w * z + x * y)
+    cosy_cosp = 1.0 - 2.0 * (y * y + z * z)
+    return math.atan2(siny_cosp, cosy_cosp)
+
+
+def get_angle_bin_index(accumulated_yaw_deg: float, bin_size_deg: float) -> int:
+    wrapped_yaw_deg = abs(accumulated_yaw_deg) % 360.0
+    return int(wrapped_yaw_deg // bin_size_deg)
 
 
 class ZedHeadingCalibrator(Node):
@@ -158,7 +202,13 @@ class ZedHeadingCalibrator(Node):
         super().__init__('calibrate_zed_heading')
 
         self.declare_parameter('mag_topic', '/zed2i/zed_node/imu/mag')
+        self.declare_parameter('odom_topic', '/zed2i/zed_node/odom')
+        self.declare_parameter('use_vio_turn_detection', True)
         self.declare_parameter('duration_sec', 30.0)
+        self.declare_parameter('max_duration_sec', 90.0)
+        self.declare_parameter('target_rotation_deg', 360.0)
+        self.declare_parameter('angle_bin_size_deg', 2.0)
+        self.declare_parameter('min_bin_coverage_ratio', 0.7)
         self.declare_parameter('min_samples', 20)
         self.declare_parameter('magnetic_field_scale', 1000000.0)
         axis_descriptor = ParameterDescriptor(dynamic_typing=True)
@@ -171,7 +221,21 @@ class ZedHeadingCalibrator(Node):
         self.declare_parameter('input_csv_path', '')
 
         self.mag_topic = str(self.get_parameter('mag_topic').value)
+        self.odom_topic = str(self.get_parameter('odom_topic').value)
+        self.use_vio_turn_detection = get_bool_parameter(
+            self.get_parameter('use_vio_turn_detection').value
+        )
         self.duration_sec = float(self.get_parameter('duration_sec').value)
+        self.max_duration_sec = float(self.get_parameter('max_duration_sec').value)
+        self.target_rotation_deg = float(
+            self.get_parameter('target_rotation_deg').value
+        )
+        self.angle_bin_size_deg = float(
+            self.get_parameter('angle_bin_size_deg').value
+        )
+        self.min_bin_coverage_ratio = float(
+            self.get_parameter('min_bin_coverage_ratio').value
+        )
         self.min_samples = int(self.get_parameter('min_samples').value)
         self.magnetic_field_scale = float(
             self.get_parameter('magnetic_field_scale').value
@@ -194,7 +258,14 @@ class ZedHeadingCalibrator(Node):
         self.max_z = -math.inf
         self.last_raw_x: Optional[float] = None
         self.last_raw_z: Optional[float] = None
-        self.samples: list[tuple[float, float, float]] = []
+        self.zero_raw_x: Optional[float] = None
+        self.zero_raw_z: Optional[float] = None
+        self.samples: list[CalibrationSample] = []
+        self.angle_bin_samples: dict[int, tuple[float, float]] = {}
+        self.vio_zero_yaw_deg: Optional[float] = None
+        self.previous_vio_yaw_deg: Optional[float] = None
+        self.accumulated_vio_yaw_deg = 0.0
+        self.finish_reason = ''
         self.start_time = self.get_clock().now()
         self.last_progress_log_time = self.start_time
         self.finished = False
@@ -206,6 +277,14 @@ class ZedHeadingCalibrator(Node):
             )
             return
 
+        if self.use_vio_turn_detection:
+            self.create_subscription(
+                Odometry,
+                self.odom_topic,
+                self.odom_callback,
+                qos_profile_sensor_data,
+            )
+
         self.create_subscription(
             MagneticField,
             self.mag_topic,
@@ -215,11 +294,15 @@ class ZedHeadingCalibrator(Node):
         self.create_timer(0.1, self.timer_callback)
 
         self.get_logger().info(
-            'collecting heading calibration samples for %.1f sec from %s; '
-            'scale=%.5f raw_x=%+.1f*%s raw_z=%+.1f*%s'
+            'collecting heading calibration samples from %s; '
+            'mode=%s max_duration=%.1f sec scale=%.5f '
+            'raw_x=%+.1f*%s raw_z=%+.1f*%s'
             % (
-                self.duration_sec,
                 self.mag_topic,
+                'vio_turn' if self.use_vio_turn_detection else 'duration',
+                self.max_duration_sec
+                if self.use_vio_turn_detection
+                else self.duration_sec,
                 self.magnetic_field_scale,
                 self.raw_x_sign,
                 self.raw_x_axis,
@@ -227,15 +310,45 @@ class ZedHeadingCalibrator(Node):
                 self.raw_z_axis,
             )
         )
-        self.get_logger().info(
-            'rotate the robot slowly through 360 degrees; keep it at yaw=0 near the end'
-        )
+        if self.use_vio_turn_detection:
+            self.get_logger().info(
+                'start at robot yaw=0, then rotate slowly until %.1f deg is reached'
+                % self.target_rotation_deg
+            )
+        else:
+            self.get_logger().info(
+                'rotate the robot slowly through 360 degrees; keep it at yaw=0 near the end'
+            )
 
     def _validate_parameters(self):
         if self.mag_topic == '':
             raise ValueError('mag_topic must not be empty')
+        if self.odom_topic == '':
+            raise ValueError('odom_topic must not be empty')
         if self.duration_sec <= 0.0 or not math.isfinite(self.duration_sec):
             raise ValueError('duration_sec must be a finite value greater than 0')
+        if self.max_duration_sec <= 0.0 or not math.isfinite(self.max_duration_sec):
+            raise ValueError('max_duration_sec must be a finite value greater than 0')
+        if self.target_rotation_deg <= 0.0 or not math.isfinite(
+            self.target_rotation_deg
+        ):
+            raise ValueError(
+                'target_rotation_deg must be a finite value greater than 0'
+            )
+        if (
+            self.angle_bin_size_deg <= 0.0
+            or self.angle_bin_size_deg > 360.0
+            or not math.isfinite(self.angle_bin_size_deg)
+        ):
+            raise ValueError('angle_bin_size_deg must be in the range (0, 360]')
+        if (
+            self.min_bin_coverage_ratio <= 0.0
+            or self.min_bin_coverage_ratio > 1.0
+            or not math.isfinite(self.min_bin_coverage_ratio)
+        ):
+            raise ValueError(
+                'min_bin_coverage_ratio must be a finite value in the range (0, 1]'
+            )
         if self.min_samples < 1:
             raise ValueError('min_samples must be greater than or equal to 1')
         if not math.isfinite(self.magnetic_field_scale):
@@ -255,8 +368,32 @@ class ZedHeadingCalibrator(Node):
         if self.sample_csv_path and self.input_csv_path:
             raise ValueError('sample_csv_path and input_csv_path cannot both be set')
 
+    def odom_callback(self, msg: Odometry):
+        orientation = msg.pose.pose.orientation
+        vio_yaw_deg = math.degrees(
+            quaternion_to_yaw_rad(
+                float(orientation.x),
+                float(orientation.y),
+                float(orientation.z),
+                float(orientation.w),
+            )
+        )
+        if self.vio_zero_yaw_deg is None or self.previous_vio_yaw_deg is None:
+            self.vio_zero_yaw_deg = vio_yaw_deg
+            self.previous_vio_yaw_deg = vio_yaw_deg
+            self.get_logger().info(
+                'VIO zero reference set: vio=%.3f deg' % self.vio_zero_yaw_deg
+            )
+            return
+
+        yaw_delta_deg = normalize_to_180(vio_yaw_deg - self.previous_vio_yaw_deg)
+        self.accumulated_vio_yaw_deg += yaw_delta_deg
+        self.previous_vio_yaw_deg = vio_yaw_deg
+
     def mag_callback(self, msg: MagneticField):
         if self.finished:
+            return
+        if self.use_vio_turn_detection and self.vio_zero_yaw_deg is None:
             return
 
         raw_x = (
@@ -277,7 +414,17 @@ class ZedHeadingCalibrator(Node):
 
         self.sample_count += 1
         stamp_sec = msg.header.stamp.sec + msg.header.stamp.nanosec / 1e9
-        self.samples.append((stamp_sec, raw_x, raw_z))
+        accumulated_yaw = (
+            self.accumulated_vio_yaw_deg if self.use_vio_turn_detection else None
+        )
+        self.samples.append(CalibrationSample(stamp_sec, raw_x, raw_z, accumulated_yaw))
+        if self.zero_raw_x is None or self.zero_raw_z is None:
+            self.zero_raw_x = raw_x
+            self.zero_raw_z = raw_z
+        if accumulated_yaw is not None:
+            self.angle_bin_samples[
+                get_angle_bin_index(accumulated_yaw, self.angle_bin_size_deg)
+            ] = (raw_x, raw_z)
         self.min_x = min(self.min_x, raw_x)
         self.max_x = max(self.max_x, raw_x)
         self.min_z = min(self.min_z, raw_z)
@@ -297,8 +444,26 @@ class ZedHeadingCalibrator(Node):
                 self.last_progress_log_time = now
                 self._log_progress(elapsed)
 
-        if elapsed >= self.duration_sec:
+        if self.use_vio_turn_detection:
+            if self._has_reached_target_rotation():
+                self.finished = True
+                self.finish_reason = 'target rotation reached'
+                self._finish()
+                rclpy.shutdown()
+                return
+            if elapsed >= self.max_duration_sec:
+                self.finished = True
+                self.finish_reason = 'max duration reached'
+                self.get_logger().warn(
+                    'max_duration_sec reached before target rotation/coverage'
+                )
+                self._finish()
+                rclpy.shutdown()
+                return
+
+        if not self.use_vio_turn_detection and elapsed >= self.duration_sec:
             self.finished = True
+            self.finish_reason = 'duration reached'
             self._finish()
             rclpy.shutdown()
 
@@ -307,19 +472,25 @@ class ZedHeadingCalibrator(Node):
             return
         self.finished = True
         try:
-            raw_samples = read_raw_samples_csv(Path(self.input_csv_path))
-            self.samples = [
-                (float(index), raw_x, raw_z)
-                for index, (raw_x, raw_z) in enumerate(raw_samples)
-            ]
-            self.sample_count = len(raw_samples)
-            if raw_samples:
-                self.last_raw_x = raw_samples[-1][0]
-                self.last_raw_z = raw_samples[-1][1]
-                self.min_x = min(raw_x for raw_x, _ in raw_samples)
-                self.max_x = max(raw_x for raw_x, _ in raw_samples)
-                self.min_z = min(raw_z for _, raw_z in raw_samples)
-                self.max_z = max(raw_z for _, raw_z in raw_samples)
+            self.samples = read_calibration_samples_csv(Path(self.input_csv_path))
+            self.sample_count = len(self.samples)
+            if self.samples:
+                self.last_raw_x = self.samples[-1].raw_x
+                self.last_raw_z = self.samples[-1].raw_z
+                self.zero_raw_x = self.samples[0].raw_x
+                self.zero_raw_z = self.samples[0].raw_z
+                self.min_x = min(sample.raw_x for sample in self.samples)
+                self.max_x = max(sample.raw_x for sample in self.samples)
+                self.min_z = min(sample.raw_z for sample in self.samples)
+                self.max_z = max(sample.raw_z for sample in self.samples)
+                for sample in self.samples:
+                    if sample.accumulated_vio_yaw_deg is not None:
+                        self.angle_bin_samples[
+                            get_angle_bin_index(
+                                sample.accumulated_vio_yaw_deg,
+                                self.angle_bin_size_deg,
+                            )
+                        ] = (sample.raw_x, sample.raw_z)
             self._finish()
         except Exception as exc:
             self.get_logger().error(
@@ -328,11 +499,52 @@ class ZedHeadingCalibrator(Node):
             )
         rclpy.shutdown()
 
+    def _has_reached_target_rotation(self) -> bool:
+        return (
+            abs(self.accumulated_vio_yaw_deg) >= self.target_rotation_deg
+            and self._bin_coverage_ratio() >= self.min_bin_coverage_ratio
+        )
+
+    def _total_bin_count(self) -> int:
+        return max(1, math.ceil(360.0 / self.angle_bin_size_deg))
+
+    def _bin_coverage_ratio(self) -> float:
+        return len(self.angle_bin_samples) / self._total_bin_count()
+
+    def _estimation_raw_samples(self) -> list[tuple[float, float]]:
+        if self.use_vio_turn_detection and self.angle_bin_samples:
+            return list(self.angle_bin_samples.values())
+        return [(sample.raw_x, sample.raw_z) for sample in self.samples]
+
     def _log_progress(self, elapsed: float):
-        remaining = max(0.0, self.duration_sec - elapsed)
+        max_duration = (
+            self.max_duration_sec if self.use_vio_turn_detection else self.duration_sec
+        )
+        remaining = max(0.0, max_duration - elapsed)
         if self.sample_count == 0:
             self.get_logger().info(
                 'collecting... samples=0 remaining=%.1f sec' % remaining
+            )
+            return
+
+        if self.use_vio_turn_detection:
+            self.get_logger().info(
+                'collecting... samples=%d rotation=%.1f/%.1f deg '
+                'bins=%d/%d coverage=%.1f%% remaining=%.1f sec '
+                'raw_x=[%.5f, %.5f] raw_z=[%.5f, %.5f]'
+                % (
+                    self.sample_count,
+                    self.accumulated_vio_yaw_deg,
+                    self.target_rotation_deg,
+                    len(self.angle_bin_samples),
+                    self._total_bin_count(),
+                    self._bin_coverage_ratio() * 100.0,
+                    remaining,
+                    self.min_x,
+                    self.max_x,
+                    self.min_z,
+                    self.max_z,
+                )
             )
             return
 
@@ -350,7 +562,13 @@ class ZedHeadingCalibrator(Node):
         )
 
     def _finish(self):
-        if self.sample_count == 0 or self.last_raw_x is None or self.last_raw_z is None:
+        if (
+            self.sample_count == 0
+            or self.zero_raw_x is None
+            or self.zero_raw_z is None
+            or self.last_raw_x is None
+            or self.last_raw_z is None
+        ):
             self.get_logger().error(
                 'no samples received for calibration; check mag_topic and ZED data hub'
             )
@@ -364,7 +582,7 @@ class ZedHeadingCalibrator(Node):
         if self.sample_csv_path:
             self._write_samples_csv(Path(self.sample_csv_path))
 
-        raw_samples = [(raw_x, raw_z) for _, raw_x, raw_z in self.samples]
+        raw_samples = self._estimation_raw_samples()
         try:
             calibration = estimate_soft_iron_calibration(raw_samples)
         except ValueError as exc:
@@ -372,8 +590,8 @@ class ZedHeadingCalibrator(Node):
             return
 
         zero_sample = calculate_heading(
-            raw_x=self.last_raw_x,
-            raw_z=self.last_raw_z,
+            raw_x=self.zero_raw_x,
+            raw_z=self.zero_raw_z,
             center_x=calibration.center_x,
             center_z=calibration.center_z,
             zero_heading_deg=0.0,
@@ -420,6 +638,20 @@ class ZedHeadingCalibrator(Node):
         print('', flush=True)
         print('# diagnostics:', flush=True)
         print(f'# samples: {self.sample_count}', flush=True)
+        print(f'# estimation_samples: {len(raw_samples)}', flush=True)
+        if self.finish_reason:
+            print(f'# finish_reason: {self.finish_reason}', flush=True)
+        if self.use_vio_turn_detection:
+            print(f'# odom_topic: {self.odom_topic}', flush=True)
+            print(
+                f'# accumulated_vio_yaw_deg: {self.accumulated_vio_yaw_deg:.6f}',
+                flush=True,
+            )
+            print(
+                '# angle_bin_coverage_ratio: %.6f'
+                % self._bin_coverage_ratio(),
+                flush=True,
+            )
         print(f'# raw_x_min: {self.min_x:.6f}', flush=True)
         print(f'# raw_x_max: {self.max_x:.6f}', flush=True)
         print(f'# raw_z_min: {self.min_z:.6f}', flush=True)
@@ -447,10 +679,22 @@ class ZedHeadingCalibrator(Node):
         csv_path.parent.mkdir(parents=True, exist_ok=True)
         with csv_path.open('w', newline='') as csv_file:
             writer = csv.writer(csv_file)
-            writer.writerow(['stamp_sec', 'raw_x', 'raw_z'])
-            for stamp_sec, raw_x, raw_z in self.samples:
+            writer.writerow([
+                'stamp_sec',
+                'raw_x',
+                'raw_z',
+                'accumulated_vio_yaw_deg',
+            ])
+            for sample in self.samples:
                 writer.writerow(
-                    [f'{stamp_sec:.9f}', f'{raw_x:.9f}', f'{raw_z:.9f}']
+                    [
+                        f'{sample.stamp_sec:.9f}',
+                        f'{sample.raw_x:.9f}',
+                        f'{sample.raw_z:.9f}',
+                        ''
+                        if sample.accumulated_vio_yaw_deg is None
+                        else f'{sample.accumulated_vio_yaw_deg:.9f}',
+                    ]
                 )
         self.get_logger().info(
             'wrote %d calibration samples to %s'
