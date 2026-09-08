@@ -7,6 +7,7 @@ from typing import Optional
 import rclpy
 from aruco_interfaces.msg import ArucoDistance
 from geometry_msgs.msg import Twist
+from mode_manager.controller_link import ControllerLink
 from rclpy.node import Node
 from rclpy.time import Time
 
@@ -31,6 +32,8 @@ class VisionDistanceController(Node):
     def __init__(self):
         super().__init__('vision_distance_controller')
 
+        self.declare_parameter('target_marker_id', -1)
+        self.declare_parameter('cmd_vel_topic', '/rov_cmd_vel')
         self.declare_parameter('target_z', 1.3)
         self.declare_parameter('kp_z', 2.0)
         self.declare_parameter('min_forward_speed', 0.30)
@@ -71,6 +74,10 @@ class VisionDistanceController(Node):
         self.detection_timeout = float(self.get_parameter('detection_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
 
+        self.target_marker_id = int(self.get_parameter('target_marker_id').value)
+        self.detection_sequence = 0
+        self.observation_time = None
+        self.docking_complete = False
         self._validate_parameters()
 
         self.latest_z: Optional[float] = None
@@ -88,7 +95,13 @@ class VisionDistanceController(Node):
         self.was_timed_out = True
         self.state = PRE_DOCKING
 
-        self.cmd_publisher = self.create_publisher(Twist, '/rov_cmd_vel', 10)
+        self.link = ControllerLink(self, 'vision', self._reset_control)
+        if self.target_marker_id < -1 or (self.link.managed and self.target_marker_id < 0):
+            raise ValueError('managed Vision requires a nonnegative target_marker_id')
+        self.cmd_publisher = None
+        if not self.link.managed:
+            self.cmd_publisher = self.create_publisher(
+                Twist, str(self.get_parameter('cmd_vel_topic').value), 10)
         self.distance_subscriber = self.create_subscription(
             ArucoDistance,
             '/aruco/distance',
@@ -101,7 +114,8 @@ class VisionDistanceController(Node):
         )
 
         self.get_logger().info('subscribing to /aruco/distance')
-        self.get_logger().info('publishing forward/backward, lateral, and yaw commands on /rov_cmd_vel')
+        self.get_logger().info('managed control output enabled' if self.link.managed
+                               else 'standalone velocity output enabled')
         self.get_logger().info(
             'target_z=%.3f kp_z=%.3f min_forward_speed=%.3f max_forward_speed=%.3f '
             'z_tolerance=%.3f docking_distance=%.3f '
@@ -167,6 +181,12 @@ class VisionDistanceController(Node):
             raise ValueError('control_rate must be greater than 0')
 
     def distance_callback(self, msg: ArucoDistance):
+        if self.target_marker_id >= 0 and msg.id != self.target_marker_id:
+            return
+        if not all(math.isfinite(v) for v in (msg.z, msg.yaw, msg.normalized_center_error)) or msg.z <= 0:
+            return
+        self.detection_sequence += 1
+        self.observation_time = self.get_clock().now()
         now = self.get_clock().now()
         if self.last_detection_time is not None:
             elapsed = now - self.last_detection_time
@@ -186,8 +206,27 @@ class VisionDistanceController(Node):
         self.latest_estimated_z = _mean(self.estimated_z_buffer)
         self.last_detection_time = now
 
+    def _reset_control(self):
+        self.state = PRE_DOCKING
+        self.docking_complete = False
+        self.was_timed_out = True
+        self._clear_position_average()
+        self.last_detection_time = None
+
+    def _tracking_valid(self):
+        if self.observation_time is None:
+            return False
+        age = (self.get_clock().now() - self.observation_time).nanoseconds * 1e-9
+        return 0.0 <= age <= self.detection_timeout
+
     def control_callback(self):
+        active = self.link.active
         cmd = Twist()
+        if not active:
+            self.link.publish(cmd, tracking_valid=self._tracking_valid(),
+                              target_marker_id=self.target_marker_id,
+                              detection_sequence=self.detection_sequence)
+            return
 
         if self._has_recent_detection():
             self.was_timed_out = False
@@ -211,7 +250,16 @@ class VisionDistanceController(Node):
                 self.get_logger().warn('ArUco detection timed out; stopping robot')
                 self.was_timed_out = True
 
-        self.cmd_publisher.publish(cmd)
+        valid = self._has_recent_detection()
+        if (self.link.managed and valid and self.state == FINAL_DOCKING
+                and self._is_final_docking_complete()):
+            self.docking_complete = True
+        if self.docking_complete:
+            cmd = Twist()
+        self.link.publish(cmd, inputs_valid=valid, tracking_valid=self._tracking_valid(),
+                          docking_complete=self.docking_complete,
+                          target_marker_id=self.target_marker_id,
+                          detection_sequence=self.detection_sequence)
 
     def _has_recent_detection(self) -> bool:
         if (
@@ -225,7 +273,7 @@ class VisionDistanceController(Node):
             return False
 
         elapsed = self.get_clock().now() - self.last_detection_time
-        return elapsed.nanoseconds * 1e-9 <= self.detection_timeout
+        return 0.0 <= elapsed.nanoseconds * 1e-9 <= self.detection_timeout
 
     def _calculate_pre_docking_command(self) -> Twist:
         cmd = Twist()

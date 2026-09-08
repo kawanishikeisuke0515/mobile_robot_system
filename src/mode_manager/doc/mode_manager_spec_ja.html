@@ -1,0 +1,417 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mode Manager 仕様書 | v0.2</title><style>
+:root{color-scheme:light;--ink:#203047;--muted:#52647a;--line:#dbe3ec;--blue:#175cc2}
+*{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:#f3f6fa;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;line-height:1.85;font-size:15px}
+.layout{max-width:1440px;margin:auto;display:grid;grid-template-columns:265px minmax(0,1fr);gap:32px;padding:32px}
+nav{position:sticky;top:24px;align-self:start;max-height:calc(100vh - 48px);overflow:auto;padding:20px 12px}nav strong{display:block;margin-bottom:14px;font-size:18px}nav a{display:block;padding:6px 10px;text-decoration:none;color:var(--muted);line-height:1.6;border-radius:6px}nav a:hover{background:#e4ecf7;color:var(--blue)}nav .level-3{padding-left:23px;font-size:13px}
+main{min-width:0;background:white;border:1px solid var(--line);border-radius:16px;padding:42px 46px;box-shadow:0 6px 28px #20304706}.eyebrow{font-size:12px;letter-spacing:.12em;font-weight:700;color:var(--blue)}h1{font-size:32px;line-height:1.4;margin:10px 0 22px}h2{font-size:23px;margin:50px 0 20px;padding-bottom:10px;border-bottom:2px solid #e5edf7}h3{font-size:18px;margin-top:30px}p{margin:16px 0}a{color:var(--blue)}code{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:.9em;background:#eef3f9;padding:2px 5px;border-radius:4px;overflow-wrap:anywhere}pre{padding:20px;background:#162638;color:#e7eff9;overflow:auto;border-radius:10px;line-height:1.65}pre code{background:none;color:inherit;padding:0;white-space:pre;overflow-wrap:normal}.table-wrap{overflow:auto;margin:20px 0;border:1px solid var(--line);border-radius:9px}table{border-collapse:collapse;width:100%;font-size:14px}th,td{padding:12px 14px;text-align:left;vertical-align:top;border-bottom:1px solid var(--line);min-width:130px}th{background:#eaf0f8;font-weight:650}tr:last-child td{border-bottom:0}tbody tr:nth-child(even){background:#f8fafc}li{margin:7px 0}.flow{margin:24px 0;padding:24px;background:#f5f8fd;border:1px solid var(--line);border-radius:12px;text-align:center}.step{padding:12px;border:1px solid #b9cce4;background:white;border-radius:9px;font-weight:700}.step span{display:block;font-size:13px;font-weight:400;color:var(--muted)}.accent{border-color:#397cdb;background:#e9f2ff}.recovery{border-color:#d3ad69;background:#fff7e9}.arrow{padding:8px;font-size:13px;color:var(--muted)}.branches{display:grid;grid-template-columns:1fr 1fr;gap:16px}figcaption{font-size:12px;color:var(--muted);margin-top:18px}.source{color:var(--muted);font-size:13px;border-top:1px solid var(--line);padding-top:18px;margin-top:36px}
+@media(max-width:900px){.layout{display:block;padding:16px}nav{position:static;max-height:none;padding:8px 0 22px}nav .level-3{display:none}nav a{display:inline-block;font-size:13px}main{padding:24px 20px}h1{font-size:26px}h2{font-size:21px}.branches{grid-template-columns:1fr}.flow{padding:14px}}
+@media print{body{background:white;font-size:10pt}.layout{display:block;padding:0}nav,.eyebrow{display:none}main{border:0;box-shadow:none;padding:0}h2{break-after:avoid;margin-top:24px}tr,.step{break-inside:avoid}.table-wrap{overflow:visible}pre{white-space:pre-wrap;background:#f0f3f7;color:#203047}pre code{white-space:pre-wrap}a{color:inherit}html{scroll-behavior:auto}}
+</style></head>
+<body><div class="layout"><nav aria-label="目次"><strong>Mode Manager</strong><a class="level-2" href="#section-1">1. 目的</a><a class="level-2" href="#section-2">2. 構成と責務</a><a class="level-2" href="#section-3">3. 状態遷移</a><a class="level-3" href="#section-4">3.1 引き渡し条件</a><a class="level-3" href="#section-5">3.2 安定検出</a><a class="level-3" href="#section-6">3.3 マーカー喪失と復帰</a><a class="level-3" href="#section-7">3.4 待機・再試行</a><a class="level-2" href="#section-8">4. インターフェース</a><a class="level-3" href="#section-9">4.1 Topic</a><a class="level-3" href="#section-10">4.2 メッセージ</a><a class="level-3" href="#section-11">4.3 Service</a><a class="level-2" href="#section-12">5. 切り替えとtimeout</a><a class="level-2" href="#section-13">6. パラメータ</a><a class="level-2" href="#section-14">7. ビルドと起動</a><a class="level-2" href="#section-15">8. 検証</a><a class="level-2" href="#section-16">9. 制限と今後の確認</a></nav><main><div class="eyebrow">DESIGN SPECIFICATION · VERSION 0.2</div><h1>Mode Manager 仕様書</h1>
+<p>Version: 0.2
+Date: 2026-09-08
+Status: 初版実装済み・模擬入力で検証、実機未検証</p>
+<h2 id="section-1">1. 目的</h2>
+<p><code>mode_manager</code> はUWB・ZEDによる位置姿勢制御とVisionによるドッキング制御を切り替え、機体へ渡す速度指令を一元管理する。</p>
+<p>UWBでマーカーを正面に捉えるための引き渡し位置・姿勢まで移動し、対象マーカーの安定検出を確認してVisionへ切り替える。Vision中に対象マーカーを見失った場合は一旦停止してUWBへ戻し、同じ引き渡し位置・姿勢へ復帰してからVisionを最初から再試行する。</p>
+<p>初版ではManager内に状態機械と速度選択を実装する。状態機械はROS非依存の <code>mode_manager/core.py</code>、ROS接続は <code>mode_manager/node.py</code>、Controller側の共通接続処理は <code>mode_manager/controller_link.py</code> に分ける。</p>
+<h2 id="section-2">2. 構成と責務</h2>
+<pre><code class="language-text">UWB位置・ZED姿勢 → UWB Controller ─ /uwb/control_output ─────┐
+                                                           ├─ Mode Manager → /rov_cmd_vel → 駆動系
+ArUco検出 → Vision Controller ─ /vision/control_output ──────┘
+                     ↑                          │
+                     └── 各 /control_request ──┘
+</code></pre>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>要素</th>
+<th>責務</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>UWB Controller</td>
+<td>引き渡しposeへの速度指令、入力有効性、到達判定</td>
+</tr>
+<tr>
+<td>Vision Controller</td>
+<td>指定IDの追跡、ドッキング制御、完了判定</td>
+</tr>
+<tr>
+<td>Mode Manager</td>
+<td>状態遷移、Controllerの有効化・リセット、速度指令の選択</td>
+</tr>
+<tr>
+<td>駆動系</td>
+<td><code>/rov_cmd_vel</code> を受けて駆動する</td>
+</tr>
+</tbody>
+</table></div>
+<p>統合時は両Controllerを <code>managed_mode=true</code> とし、<code>/rov_cmd_vel</code> のpublisherをManagerだけにする。非選択中も観測と状態報告を続ける。Visionの制御状態は非選択中に進めない。</p>
+<p>初期案の個別Twist topicとstatus topicは、実装では <code>ControllerOutput</code> に統合した。状態・速度・実行IDを一緒に届けることで、状態と速度の取り違えや切り替え前の指令の再利用を防ぐ。</p>
+<h2 id="section-3">3. 状態遷移</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状態</th>
+<th>出力・動作</th>
+<th>遷移</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>IDLE</code></td>
+<td>ゼロ速度。起動時の状態</td>
+<td>start serviceで <code>UWB_APPROACH</code></td>
+</tr>
+<tr>
+<td><code>UWB_APPROACH</code></td>
+<td>有効なUWB指令</td>
+<td>引き渡しposeに到達したら <code>VISION_WAIT</code></td>
+</tr>
+<tr>
+<td><code>VISION_WAIT</code></td>
+<td>ゼロ速度</td>
+<td>到達条件と安定検出が揃ったら <code>VISION_DOCKING</code></td>
+</tr>
+<tr>
+<td><code>VISION_DOCKING</code></td>
+<td>有効なVision指令</td>
+<td>検出喪失で <code>UWB_RECOVERY</code>、完了で <code>DONE</code></td>
+</tr>
+<tr>
+<td><code>UWB_RECOVERY</code></td>
+<td>一旦停止後、同じ引き渡しposeへUWBで復帰</td>
+<td>再到達したら <code>VISION_WAIT</code></td>
+</tr>
+<tr>
+<td><code>DONE</code></td>
+<td>ゼロ速度を維持</td>
+<td>start serviceで新しい実行</td>
+</tr>
+<tr>
+<td><code>FAULT</code></td>
+<td>ゼロ速度を維持</td>
+<td>原因解消後、start serviceで新しい実行</td>
+</tr>
+</tbody>
+</table></div>
+<pre><code class="language-text">IDLE ─ start → UWB_APPROACH ─ 到達 → VISION_WAIT ─ 安定検出 → VISION_DOCKING ─ 完了 → DONE
+                                    ↑                          │
+                                    └── 到達 ─ UWB_RECOVERY ←──┘ 検出喪失
+</code></pre>
+<p>全状態でstop serviceを受け付け、<code>IDLE</code> に戻してゼロ速度を出力する。実行中のstartは拒否する。動作中の必要なController出力の途絶、非有限な速度指令、時刻の巻き戻りは <code>FAULT</code> とする。</p>
+<h3 id="section-4">3.1 引き渡し条件</h3>
+<p>UWB Controllerが、最新かつ有効なUWB位置・ZED姿勢で、目標x/y/yawの許容誤差をすべて満たした場合に <code>target_reached=true</code> とする。Managerは速度ゼロから到達を推測しない。</p>
+<p><code>VISION_WAIT</code> でもUWBの到達状態を再確認する。位置・姿勢が有効で到達条件を外れた場合は <code>UWB_RECOVERY</code> へ戻す。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。</p>
+<h3 id="section-5">3.2 安定検出</h3>
+<p>対象IDの <code>tracking_valid=true</code> が <code>stable_detection_time</code> 以上継続し、その区間で <code>min_detections</code> 以上の新しい検出を確認する。状態の定期publishだけでは検出回数は増えない。</p>
+<p>判定は <code>VISION_WAIT</code> に入ってから開始する。false、通信timeout、検出カウンタの巻き戻りで継続判定をリセットする。<code>tracking_valid</code> は検出timeoutまでの短い欠落を許容するため、「全画像で連続検出」を意味しない。</p>
+<h3 id="section-6">3.3 マーカー喪失と復帰</h3>
+<p>対象マーカーの最後の有効な受信からVisionの <code>detection_timeout</code> を超えると <code>tracking_valid=false</code> となる。Managerは一旦ゼロ速度を出し、<code>UWB_RECOVERY</code> へ切り替える。</p>
+<p>復帰途中で対象マーカーが見えても直接Visionへ切り替えない。引き渡しposeに再到達してから安定検出を確認する。UWB位置や姿勢が無効な間は復帰移動を行わない。</p>
+<p>Visionの通信途絶は明示的な検出喪失と区別し、<code>FAULT</code> で停止する。同じ出力で完了と検出喪失が報告された場合は、喪失を優先する。<code>DONE</code> に入った後の未検出では復帰を開始しない。</p>
+<h3 id="section-7">3.4 待機・再試行</h3>
+<p><code>VISION_WAIT</code> が <code>vision_wait_timeout</code> を超えたら <code>FAULT</code> とする。初版では自動復帰の回数上限は設けない。UWB入力が無効な場合は停止待機を継続する。異常後に勝手に再開せず、startを必要とする。</p>
+<h2 id="section-8">4. インターフェース</h2>
+<h3 id="section-9">4.1 Topic</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Topic</th>
+<th>型</th>
+<th>方向・用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/uwb/control_request</code></td>
+<td><code>mode_manager_interfaces/msg/ControlRequest</code></td>
+<td>Manager → UWB。有効化と実行ID</td>
+</tr>
+<tr>
+<td><code>/vision/control_request</code></td>
+<td>同上</td>
+<td>Manager → Vision。有効化と実行ID</td>
+</tr>
+<tr>
+<td><code>/uwb/control_output</code></td>
+<td><code>mode_manager_interfaces/msg/ControllerOutput</code></td>
+<td>UWB → Manager。状態と速度</td>
+</tr>
+<tr>
+<td><code>/vision/control_output</code></td>
+<td>同上</td>
+<td>Vision → Manager。追跡・完了状態と速度</td>
+</tr>
+<tr>
+<td><code>/rov_cmd_vel</code></td>
+<td><code>geometry_msgs/msg/Twist</code></td>
+<td>Manager → 駆動系。選択指令またはゼロ速度</td>
+</tr>
+<tr>
+<td><code>/mode_manager/state</code></td>
+<td><code>std_msgs/msg/String</code></td>
+<td>現在の状態名を定周期publish</td>
+</tr>
+</tbody>
+</table></div>
+<p>QoSはreliable・volatile・depth 1。必要ならROSのremappingでtopicを変更する。</p>
+<h3 id="section-10">4.2 メッセージ</h3>
+<p><code>ControlRequest</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>型</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stamp</code></td>
+<td><code>builtin_interfaces/Time</code></td>
+<td>生成時刻</td>
+</tr>
+<tr>
+<td><code>session_id</code></td>
+<td><code>string</code></td>
+<td>Managerが状態遷移ごとに発行するUUID</td>
+</tr>
+<tr>
+<td><code>enabled</code></td>
+<td><code>bool</code></td>
+<td>このControllerを制御用に有効化するか</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>ControllerOutput</code>:</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Field</th>
+<th>型</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stamp</code></td>
+<td><code>builtin_interfaces/Time</code></td>
+<td>状態と速度の生成時刻</td>
+</tr>
+<tr>
+<td><code>session_id</code></td>
+<td><code>string</code></td>
+<td>Controllerが受け付けた実行ID</td>
+</tr>
+<tr>
+<td><code>active</code></td>
+<td><code>bool</code></td>
+<td>有効化され、Managerの定期要求がtimeoutしていない</td>
+</tr>
+<tr>
+<td><code>inputs_valid</code></td>
+<td><code>bool</code></td>
+<td>制御用入力が有効かつ最新</td>
+</tr>
+<tr>
+<td><code>target_reached</code></td>
+<td><code>bool</code></td>
+<td>UWBの引き渡しpose到達判定</td>
+</tr>
+<tr>
+<td><code>tracking_valid</code></td>
+<td><code>bool</code></td>
+<td>Visionの対象IDの検出がtimeoutしていない</td>
+</tr>
+<tr>
+<td><code>docking_complete</code></td>
+<td><code>bool</code></td>
+<td>現在のVision実行で完了条件を満たした</td>
+</tr>
+<tr>
+<td><code>target_marker_id</code></td>
+<td><code>int32</code></td>
+<td>Visionの対象マーカーID。UWBでは-1</td>
+</tr>
+<tr>
+<td><code>detection_sequence</code></td>
+<td><code>uint64</code></td>
+<td>対象IDの有効な検出受信ごとに増加するカウンタ</td>
+</tr>
+<tr>
+<td><code>command</code></td>
+<td><code>geometry_msgs/Twist</code></td>
+<td>今回生成した速度。非選択・入力無効ならゼロ</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>command</code> の利用成分は <code>linear.x</code>, <code>linear.y</code>, <code>angular.z</code>。Managerはその他の成分をゼロにする。</p>
+<p>Visionの <code>inputs_valid</code> と <code>tracking_valid</code> は別に扱う。非選択中やリセット直後でも観測の追跡状態は報告できるが、制御用平均に新しいサンプルが揃うまでは速度を採用しない。</p>
+<h3 id="section-11">4.3 Service</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Service</th>
+<th>型</th>
+<th>動作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>/mode_manager/start</code></td>
+<td><code>std_srvs/srv/Trigger</code></td>
+<td><code>IDLE/DONE/FAULT</code> から新しいUWB移動を開始</td>
+</tr>
+<tr>
+<td><code>/mode_manager/stop</code></td>
+<td><code>std_srvs/srv/Trigger</code></td>
+<td>全状態から停止し <code>IDLE</code> へ移行</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-12">5. 切り替えとtimeout</h2>
+<ol>
+<li>状態遷移時に新しい実行IDを発行し、保存していた出力を破棄する。</li>
+<li>遷移周期ではゼロ速度をpublishする。</li>
+<li>各Controllerへ新しい実行IDと有効化状態を定期送信する。</li>
+<li>Controllerは新しい実行IDまたは有効化状態の変化を受け取ると制御状態をリセットする。</li>
+<li>Managerは現在の実行IDに対応する、最新かつ有効な選択側出力だけを採用する。</li>
+</ol>
+<p>UWBのリセットでは到達状態と入力受信時刻をクリアし、新しい位置・姿勢入力を待つ。Visionのリセットでは <code>PRE_DOCKING</code> に戻し、完了状態と制御用位置平均をクリアする。観測用の最終検出時刻と検出カウンタは保持する。</p>
+<p>出力と要求の時刻が未来・期限切れ・重複・逆順の場合は採用しない。受信後の鮮度監視には単調時計を使用し、出力については生成から受信までの経過時間も差し引く。ノード間で同じROS時刻系を使うこと。</p>
+<p>Managerは状態遷移後に最大 <code>output_timeout</code> の応答猶予を設け、その間は新しい指令がなければゼロ速度とする。その後、必要な出力がなければ <code>FAULT</code> にする。UWB移動中はUWB、Vision中はVision、Vision待機中は両方の出力を監視する。</p>
+<p>ControllerはManagerからの要求が <code>manager_timeout</code> を超えたら無効化し、制御をリセットする。ゼロ速度の送信は実際の機体停止確認ではない。</p>
+<h2 id="section-13">6. パラメータ</h2>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>Manager parameter</th>
+<th>初期値</th>
+<th>制約・用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>target_marker_id</code></td>
+<td>0</td>
+<td>0以上。Vision側と一致させる</td>
+</tr>
+<tr>
+<td><code>control_rate</code></td>
+<td>20.0 Hz</td>
+<td>有限・正。指令・状態・制御要求の周期</td>
+</tr>
+<tr>
+<td><code>output_timeout</code></td>
+<td>0.5 s</td>
+<td>有限・正。Controller出力の有効期間と応答猶予</td>
+</tr>
+<tr>
+<td><code>stable_detection_time</code></td>
+<td>0.5 s</td>
+<td>有限・正。安定検出期間</td>
+</tr>
+<tr>
+<td><code>min_detections</code></td>
+<td>3</td>
+<td>2以上。期間中に必要な新規検出回数</td>
+</tr>
+<tr>
+<td><code>vision_wait_timeout</code></td>
+<td>30.0 s</td>
+<td>有限・正。Vision待機上限</td>
+</tr>
+</tbody>
+</table></div>
+<p>両Controllerに <code>managed_mode</code>（初期値false）と <code>manager_timeout</code>（0.5秒、有限・正）を追加した。Visionには <code>target_marker_id</code>（単体時の初期値-1で全ID、管理時は0以上必須）と <code>cmd_vel_topic</code>（単体時の初期値 <code>/rov_cmd_vel</code>）を追加した。</p>
+<p>Visionの既存 <code>detection_timeout</code> 初期値は0.5秒。対象外ID、非有限値、zが正でない検出は採用せず、検出時刻・検出カウンタも更新しない。</p>
+<p>数値は初版の設定であり、実機で確定した値ではない。出力周期と通信遅延に対してtimeoutに余裕を持たせる。</p>
+<h2 id="section-14">7. ビルドと起動</h2>
+<p>ZEDカメラ・UWB・headingまでまとめて起動する場合は、<code>uwb_zed_docking_bringup/docking.launch.py</code> を使う。<a href="../../uwb_zed_docking_bringup/doc/docking_bringup_ja.md">全体bringupの起動手順</a> に設定ファイルと部分起動オプションを記載する。以下の <code>managed_docking.launch.py</code> はController・Manager・検出器のみを起動する構成。</p>
+<pre><code class="language-bash">cd mobile_robot_system
+source /opt/ros/jazzy/setup.bash
+colcon build --packages-up-to uwb_zed_docking_bringup
+source install/setup.bash
+</code></pre>
+<p>統合launchはManager、両Controller、ArUco検出ノードを起動する。引き渡し位置・姿勢とIDは必須引数。以下の数値は例であり、使用する環境に合わせて変更する。</p>
+<pre><code class="language-bash">ros2 launch uwb_zed_docking_bringup managed_docking.launch.py \
+  handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7
+</code></pre>
+<p>UWB位置、ZED heading、画像とCameraInfoを供給するノード、および駆動系は別途起動する。既存の単体Controllerを起動するlaunchと同時に使わず、最終速度topicのpublisherを一つにする。</p>
+<pre><code class="language-bash">ros2 service call /mode_manager/start std_srvs/srv/Trigger '{}'
+ros2 topic echo /mode_manager/state
+ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
+</code></pre>
+<p>Managerだけを起動する場合:</p>
+<pre><code class="language-bash">ros2 launch mode_manager mode_manager.launch.py
+</code></pre>
+<p>このlaunchは <code>params_file</code> でYAMLを指定できる。単独ではControllerを起動しないため、別途対応するControllerが必要。</p>
+<h2 id="section-15">8. 検証</h2>
+<p>ROS非依存の状態機械テストと、実際のManager・両Controllerに模擬センサを入力するROSテストを用意した。カメラ・駆動ノードは起動しない。</p>
+<pre><code class="language-bash">python -m pytest -q src/mode_manager/test
+</code></pre>
+<p>ROS統合テストはビルド済みworkspaceをsourceして実行する。インターフェースやControllerが使えない環境では該当テストをskipする。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>確認項目</th>
+<th>期待動作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>通常の到達と安定検出</td>
+<td>UWBからVisionへ切り替わる</td>
+</tr>
+<tr>
+<td>状態heartbeatのみ、対象外ID</td>
+<td>安定検出条件を満たさない</td>
+</tr>
+<tr>
+<td>Visionの検出喪失</td>
+<td>ゼロ速度を出し、UWB復帰する</td>
+</tr>
+<tr>
+<td>復帰途中の再検出</td>
+<td>到達まではUWBを継続する</td>
+</tr>
+<tr>
+<td>UWB入力無効</td>
+<td>復帰中も停止する</td>
+</tr>
+<tr>
+<td>完了後の未検出</td>
+<td><code>DONE</code> を維持する</td>
+</tr>
+<tr>
+<td>選択外・旧実行IDの指令</td>
+<td>採用しない</td>
+</tr>
+<tr>
+<td>出力timeout、非有限指令</td>
+<td><code>FAULT</code> で停止する</td>
+</tr>
+<tr>
+<td>待機中のpose逸脱、待機timeout</td>
+<td>UWB復帰、または <code>FAULT</code></td>
+</tr>
+<tr>
+<td>統合構成の最終速度topic</td>
+<td>Managerのみがpublishする</td>
+</tr>
+</tbody>
+</table></div>
+<h2 id="section-16">9. 制限と今後の確認</h2>
+<ul>
+<li>実機の復帰経路、制御ゲイン、引き渡しpose、timeout設定は未検証。UWB復帰は既存の位置姿勢制御であり、経路計画や障害物回避を追加していない。</li>
+<li>ArUcoメッセージに画像取得時刻がないため、Visionの検出鮮度は受信時刻ベース。画像の遅延と新しい画像を区別する拡張は未実装。</li>
+<li>未検出とカメラ入力の途絶は、どちらも検出timeoutとして扱う。Vision Controllerそのものの通信途絶は別に <code>FAULT</code> とする。</li>
+<li>Managerプロセスが強制終了した場合、Controllerの無効化だけでは駆動系に最終ゼロ指令が届く保証はない。駆動側の速度指令watchdogは本変更に含めておらず、実機運用前に対応・確認が必要。</li>
+<li>自動復帰回数上限、機体の停止確認、構造化した異常理由topicは今後の検討事項。</li>
+</ul>
+<p>関連する単体制御仕様は <a href="../../uwb_position_zed_pose_ctrl/doc/uwb_position_zed_pose_ctrl_requirements_ja.md">UWB仕様</a> と <a href="../../vision_dist_ctrl/docs/requirements_ja.md">Vision仕様</a> を参照する。</p>
+<p class="source">本HTMLは <a href="mode_manager_spec_ja.md">Markdown仕様書</a> の閲覧用スナップショットです。仕様変更時は両方を更新してください。</p></main></div></body></html>

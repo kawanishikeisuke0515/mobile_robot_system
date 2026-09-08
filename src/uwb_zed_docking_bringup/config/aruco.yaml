@@ -1,0 +1,8 @@
+aruco_distance_publisher:
+  ros__parameters:
+    image_topic: /zed2i/zed_node/rgb/color/rect/image
+    camera_info_topic: /zed2i/zed_node/rgb/color/rect/camera_info
+    use_camera_info: true
+    use_rectified_camera_info: true
+    use_camera_model_center_error: true
+    marker_length: 0.168

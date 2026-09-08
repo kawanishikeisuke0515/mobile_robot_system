@@ -1,0 +1,8 @@
+mode_manager:
+  ros__parameters:
+    target_marker_id: 0
+    control_rate: 20.0
+    output_timeout: 0.5
+    stable_detection_time: 0.5
+    min_detections: 3
+    vision_wait_timeout: 30.0

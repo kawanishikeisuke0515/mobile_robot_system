@@ -295,3 +295,7 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 | TBD-002 | `linear.y` の実機挙動 | `linear.y > 0.0` が UWB/world `+x` 方向へ動くことを実機で確認する |
 | TBD-003 | UWB 座標系と ZED yaw のゼロ方向 | `robot_yaw_rad == 0` の方向を UWB/world `+y` として実機で合わせる |
 | TBD-004 | UWB 位置の平滑化 | 初期仕様では controller 内平滑化なし。必要なら移動平均 parameter を追加する |
+
+## Mode Managerとの統合（2026-09-08）
+
+`managed_mode=true` の場合、単体用の `/rov_cmd_vel` 出力を作成せず、実行ID・状態・速度をまとめた `ControllerOutput` をManagerへ送る。初期値falseでは従来の単体速度topicを使用する。Managerからの有効化・リセットとtimeoutを扱う。詳細は [Mode Manager仕様](../../mode_manager/doc/mode_manager_spec_ja.md) を参照する。

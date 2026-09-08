@@ -3,6 +3,7 @@ from typing import Optional
 
 import rclpy
 from geometry_msgs.msg import Twist
+from mode_manager.controller_link import ControllerLink
 from rclpy.node import Node
 from rclpy.time import Time
 from uwb_interfaces.msg import UwbPosition
@@ -69,7 +70,10 @@ class UwbPositionZedPoseController(Node):
         self.was_waiting_for_inputs = True
         self.was_target_reached = False
 
-        self.cmd_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
+        self.link = ControllerLink(self, 'uwb', self._reset_control)
+        self.cmd_publisher = None
+        if not self.link.managed:
+            self.cmd_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
         self.create_subscription(
             UwbPosition,
             self.uwb_position_topic,
@@ -89,7 +93,8 @@ class UwbPositionZedPoseController(Node):
 
         self.get_logger().info(
             'subscribing %s and %s; publishing %s'
-            % (self.uwb_position_topic, self.zed_heading_topic, self.cmd_vel_topic)
+            % (self.uwb_position_topic, self.zed_heading_topic,
+               '/uwb/control_output' if self.link.managed else self.cmd_vel_topic)
         )
         self.get_logger().info(
             'target=(%.3f, %.3f, %.3f) tolerance=(%.3f, %.3f, %.3f) '
@@ -185,14 +190,20 @@ class UwbPositionZedPoseController(Node):
         self.latest_heading = msg
         self.last_heading_time = self.get_clock().now()
 
+    def _reset_control(self):
+        self.was_target_reached = False
+        self.last_position_time = None
+        self.last_heading_time = None
+
     def control_callback(self):
+        active = self.link.active
         cmd = Twist()
         if not self._has_valid_inputs():
             if not self.was_waiting_for_inputs:
                 self.get_logger().warn('UWB position or ZED heading unavailable; stopping robot')
             self.was_waiting_for_inputs = True
             self.was_target_reached = False
-            self.cmd_publisher.publish(cmd)
+            self.link.publish(cmd, inputs_valid=False)
             return
 
         self.was_waiting_for_inputs = False
@@ -209,7 +220,10 @@ class UwbPositionZedPoseController(Node):
         if result.debug.target_reached and not self.was_target_reached:
             self.get_logger().info('target pose reached; publishing zero velocity')
         self.was_target_reached = result.debug.target_reached
-        self.cmd_publisher.publish(cmd)
+        if not active:
+            cmd = Twist()
+        self.link.publish(cmd, inputs_valid=True,
+                          target_reached=result.debug.target_reached)
 
     def _has_valid_inputs(self) -> bool:
         if (
@@ -232,8 +246,8 @@ class UwbPositionZedPoseController(Node):
         position_elapsed = (now - self.last_position_time).nanoseconds * 1e-9
         heading_elapsed = (now - self.last_heading_time).nanoseconds * 1e-9
         return (
-            position_elapsed <= self.position_timeout
-            and heading_elapsed <= self.heading_timeout
+            0.0 <= position_elapsed <= self.position_timeout
+            and 0.0 <= heading_elapsed <= self.heading_timeout
         )
 
 

@@ -11,6 +11,7 @@
 
   <depend>geometry_msgs</depend>
   <depend>rclpy</depend>
+  <depend>mode_manager</depend>
   <depend>uwb_interfaces</depend>
   <depend>zed_interfaces</depend>
 

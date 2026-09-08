@@ -285,3 +285,7 @@ AIが設計仕様書を作成する場合、以下を守ること。
 注意:
 
 AIによる勝手な仕様追加を避け、既存仕様をできるだけ維持してください。
+
+## Mode Managerとの統合（2026-09-08）
+
+`managed_mode=true` の場合、単体用の `/rov_cmd_vel` 出力を作成せず、実行ID・状態・速度をまとめた `ControllerOutput` をManagerへ送る。初期値falseでは従来の単体速度topicを使用する。Managerからの有効化・リセットとtimeoutを扱う。詳細は [Mode Manager仕様](../../mode_manager/doc/mode_manager_spec_ja.md) を参照する。

@@ -1,0 +1,10 @@
+vision_distance_controller:
+  ros__parameters:
+    detection_timeout: 0.5
+    control_rate: 20.0
+    position_average_window_size: 5
+    target_x: 0.0
+    target_yaw: 0.0
+    z_tolerance: 0.01
+    x_tolerance: 0.01
+    center_deadband: 0.05
