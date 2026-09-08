@@ -163,19 +163,19 @@ Visionの既存 `detection_timeout` 初期値は0.5秒。対象外ID、非有限
 
 ## 7. ビルドと起動
 
-ZEDカメラ・UWB・headingまでまとめて起動する場合は、`uwb_zed_docking_bringup/docking.launch.py` を使う。[全体bringupの起動手順](../../uwb_zed_docking_bringup/doc/docking_bringup_ja.md) に設定ファイルと部分起動オプションを記載する。以下の `managed_docking.launch.py` はController・Manager・検出器のみを起動する構成。
+ZEDカメラ・UWB・headingまでまとめて起動する場合は、`docking_bringup/docking.launch.py` を使う。[全体bringupの起動手順](../../docking_bringup/doc/docking_bringup_ja.md) に設定ファイルと部分起動オプションを記載する。以下の `managed_docking.launch.py` はController・Manager・検出器のみを起動する構成。
 
 ```bash
 cd mobile_robot_system
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to uwb_zed_docking_bringup
+colcon build --packages-up-to docking_bringup
 source install/setup.bash
 ```
 
 統合launchはManager、両Controller、ArUco検出ノードを起動する。引き渡し位置・姿勢とIDは必須引数。以下の数値は例であり、使用する環境に合わせて変更する。
 
 ```bash
-ros2 launch uwb_zed_docking_bringup managed_docking.launch.py \
+ros2 launch docking_bringup managed_docking.launch.py \
   handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7
 ```
 

@@ -1,9 +1,9 @@
 <?xml version="1.0"?>
 <?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
 <package format="3">
-  <name>uwb_zed_docking_bringup</name>
+  <name>docking_bringup</name>
   <version>0.0.0</version>
-  <description>Bringup launch files for UWB and ZED based docking.</description>
+  <description>Integrated bringup for UWB, ZED, Vision and mode-managed docking.</description>
   <maintainer email="user@example.com">user</maintainer>
   <license>Apache-2.0</license>
 
@@ -13,6 +13,10 @@
   <exec_depend>zed_heading_publisher</exec_depend>
   <exec_depend>uwb_position_zed_pose_ctrl</exec_depend>
   <exec_depend>locomotion_core</exec_depend>
+  <exec_depend>zed_wrapper_data_hub</exec_depend>
+  <exec_depend>mode_manager</exec_depend>
+  <exec_depend>vision_dist_ctrl</exec_depend>
+  <exec_depend>aruco_distance_publisher</exec_depend>
   <exec_depend>launch</exec_depend>
   <exec_depend>launch_ros</exec_depend>
 

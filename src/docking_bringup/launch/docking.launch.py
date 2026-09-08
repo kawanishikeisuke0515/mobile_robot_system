@@ -26,8 +26,8 @@ def generate_launch_description():
         'zed_config': ('zed_wrapper_data_hub', 'zed2i_data_hub.yaml'),
         'manager_config': ('mode_manager', 'mode_manager.yaml'),
         'uwb_controller_config': ('uwb_position_zed_pose_ctrl', 'uwb_position_zed_pose_ctrl.yaml'),
-        'vision_config': ('uwb_zed_docking_bringup', 'vision.yaml'),
-        'aruco_config': ('uwb_zed_docking_bringup', 'aruco.yaml'),
+        'vision_config': ('docking_bringup', 'vision.yaml'),
+        'aruco_config': ('docking_bringup', 'aruco.yaml'),
     }
     declarations = [DeclareLaunchArgument(
         name, default_value=config(package, filename), description=f'Parameter YAML: {name}')
@@ -75,7 +75,7 @@ def generate_launch_description():
              name='zed_heading_publisher', output='screen',
              parameters=[LaunchConfiguration('heading_config')],
              condition=IfCondition(LaunchConfiguration('start_heading'))),
-        include('uwb_zed_docking_bringup', 'managed_docking.launch.py', managed_args),
+        include('docking_bringup', 'managed_docking.launch.py', managed_args),
         Node(package='locomotion_core', executable='rover_velocity',
              name='rover_velocity', output='screen',
              condition=IfCondition(LaunchConfiguration('start_locomotion'))),

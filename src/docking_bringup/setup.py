@@ -2,7 +2,7 @@ from glob import glob
 
 from setuptools import find_packages, setup
 
-package_name = 'uwb_zed_docking_bringup'
+package_name = 'docking_bringup'
 
 setup(
     name=package_name,
@@ -13,12 +13,14 @@ setup(
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
+        ('share/' + package_name + '/config', glob('config/*.yaml')),
+        ('share/' + package_name + '/doc', glob('doc/*.md')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='user',
     maintainer_email='user@example.com',
-    description='Bringup launch files for UWB and ZED based docking',
+    description='Integrated bringup for UWB, ZED, Vision and mode-managed docking',
     license='Apache-2.0',
     tests_require=['pytest'],
 )

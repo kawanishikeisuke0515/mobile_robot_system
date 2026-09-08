@@ -24,10 +24,10 @@ ZED SDK、公式 `zed_wrapper` / `zed_description` および各ノードの実�
 ```bash
 cd mobile_robot_system
 source /opt/ros/jazzy/setup.bash
-colcon build --packages-up-to uwb_zed_docking_bringup
+colcon build --packages-up-to docking_bringup
 source install/setup.bash
 
-ros2 launch uwb_zed_docking_bringup docking.launch.py \
+ros2 launch docking_bringup docking.launch.py \
   handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7
 ```
 
@@ -59,7 +59,7 @@ ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
 | `aruco_config` | 本packageの `config/aruco.yaml`。画像topic、マーカー寸法等 |
 
 ```bash
-ros2 launch uwb_zed_docking_bringup docking.launch.py \
+ros2 launch docking_bringup docking.launch.py \
   handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7 \
   heading_config:=/absolute/path/heading.yaml \
   uwb_distance_config:=/absolute/path/uwb_serial.yaml

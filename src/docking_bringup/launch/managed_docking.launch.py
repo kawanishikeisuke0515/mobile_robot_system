@@ -20,9 +20,9 @@ def generate_launch_description():
         DeclareLaunchArgument('uwb_controller_config', default_value=config(
             'uwb_position_zed_pose_ctrl', 'uwb_position_zed_pose_ctrl.yaml')),
         DeclareLaunchArgument('vision_config', default_value=config(
-            'uwb_zed_docking_bringup', 'vision.yaml')),
+            'docking_bringup', 'vision.yaml')),
         DeclareLaunchArgument('aruco_config', default_value=config(
-            'uwb_zed_docking_bringup', 'aruco.yaml')),
+            'docking_bringup', 'aruco.yaml')),
         DeclareLaunchArgument('handoff_x', description='UWB world target x [m]'),
         DeclareLaunchArgument('handoff_y', description='UWB world target y [m]'),
         DeclareLaunchArgument('handoff_yaw', description='ZED target heading [rad]'),
