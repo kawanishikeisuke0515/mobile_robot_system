@@ -1,5 +1,6 @@
 mode_manager:
   ros__parameters:
+    auto_start: false
     target_marker_id: 0
     control_rate: 20.0
     output_timeout: 0.5

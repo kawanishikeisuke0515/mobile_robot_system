@@ -19,7 +19,7 @@ class Output:
 
 class ModeMachine:
     def __init__(self, *, timeout=0.5, stable_time=0.5, min_detections=3,
-                 wait_timeout=30.0, target_marker_id=0):
+                 wait_timeout=30.0, target_marker_id=0, auto_start=False):
         for value in (timeout, stable_time, wait_timeout):
             if not math.isfinite(value) or value <= 0:
                 raise ValueError('timeouts and stable_time must be finite and positive')
@@ -30,6 +30,7 @@ class ModeMachine:
         self.min_detections = min_detections
         self.wait_timeout = wait_timeout
         self.target_marker_id = target_marker_id
+        self.auto_start_pending = auto_start
         self.state = 'IDLE'
         self.session_id = uuid4().hex
         self.entered = 0.0
@@ -40,6 +41,7 @@ class ModeMachine:
         self.reason = 'waiting for start'
 
     def transition(self, state, now, reason):
+        self.auto_start_pending = False
         self.state = state
         self.session_id = uuid4().hex
         self.entered = now
@@ -93,6 +95,14 @@ class ModeMachine:
         if self.last_tick is not None and now < self.last_tick:
             self.transition('FAULT', now, 'clock moved backwards')
         self.last_tick = now
+        if self.state == 'IDLE' and self.auto_start_pending:
+            uwb = self.recent('uwb', now)
+            vision = self.recent('vision', now)
+            if (uwb and uwb.inputs_valid and vision
+                    and vision.target_marker_id == self.target_marker_id):
+                self.start(now)
+                self.reason = 'automatic start: controllers and UWB pose ready'
+            return zero
         if self.state in ('IDLE', 'DONE', 'FAULT'):
             return zero
         uwb, vision = self.recent('uwb', now), self.recent('vision', now)

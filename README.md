@@ -192,4 +192,4 @@ During PRE_DOCKING and FINAL_DOCKING, `angular.z` is controlled to keep the mark
 
 ## Managed docking bringup (UWB + ZED + Vision)
 
-`ros2 launch docking_bringup docking.launch.py handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7` starts the sensor stack, managed controllers, and mode manager. Coordinates and ID are examples. Motion starts via `/mode_manager/start`; motor nodes are optional (`start_locomotion:=true`). See [bringup instructions](src/docking_bringup/doc/docking_bringup_ja.md) for configuration and partial startup.
+`ros2 launch docking_bringup docking.launch.py handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7` starts the sensor stack, managed controllers, and mode manager. Coordinates and ID are examples. Motion starts automatically once controller responses and valid UWB/ZED pose inputs are ready; motor nodes start by default. Use `auto_start:=false` for manual start or `start_locomotion:=false` to omit motor nodes. See [bringup instructions](src/docking_bringup/doc/docking_bringup_ja.md) for configuration and partial startup.

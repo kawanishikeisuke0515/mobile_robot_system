@@ -19,10 +19,11 @@ from uwb_position_zed_pose_ctrl.uwb_position_zed_pose_ctrl import UwbPositionZed
 from vision_dist_ctrl.vision_distance_controller import VisionDistanceController
 
 
-def test_real_controllers_handoff_recovery_completion_and_stop():
+@pytest.mark.parametrize('auto_start', [False, True])
+def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
     rclpy.init(args=['--ros-args', '-p', 'managed_mode:=true', '-p',
                     'target_marker_id:=7', '-p', 'stable_detection_time:=0.15',
-                    '-p', 'detection_timeout:=0.2'])
+                    '-p', 'detection_timeout:=0.2', '-p', f'auto_start:={str(auto_start).lower()}'])
     nodes = []
     executor = SingleThreadedExecutor()
     try:
@@ -38,7 +39,7 @@ def test_real_controllers_handoff_recovery_completion_and_stop():
         marker_pub = probe.create_publisher(ArucoDistance, '/aruco/distance', 10)
         observed = []
         probe.create_subscription(Twist, '/rov_cmd_vel', lambda msg: observed.append(msg), 10)
-        position = UwbPosition(x_m=0.0, y_m=-1.0, valid=True)
+        position = UwbPosition(x_m=0.0, y_m=-1.0, valid=False)
         heading = ZedHeading(robot_yaw_rad=0.0, valid=True)
         marker = ArucoDistance(id=7, z=1.3, yaw=0.0, normalized_center_error=0.0)
         use_marker = True
@@ -60,7 +61,9 @@ def test_real_controllers_handoff_recovery_completion_and_stop():
         assert all(msg.linear.x == 0. for msg in observed)
         # Exactly the manager publishes to the final output.
         pump_until(lambda: probe.count_publishers('/rov_cmd_vel') == 1)
-        assert manager.start(Trigger.Request(), Trigger.Response()).success
+        position.valid = True
+        if not auto_start:
+            assert manager.start(Trigger.Request(), Trigger.Response()).success
         pump_until(lambda: any(msg.linear.x > 0 for msg in observed))
         position.y_m = 0.0
         pump_until(lambda: manager.machine.state == 'VISION_DOCKING')

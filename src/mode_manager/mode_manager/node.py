@@ -18,7 +18,7 @@ class ModeManager(Node):
         super().__init__('mode_manager')
         defaults = dict(output_timeout=0.5, stable_detection_time=0.5,
                         min_detections=3, vision_wait_timeout=30.0,
-                        target_marker_id=0, control_rate=20.0)
+                        target_marker_id=0, control_rate=20.0, auto_start=False)
         for key, value in defaults.items():
             self.declare_parameter(key, value)
         def value(key):
@@ -31,7 +31,8 @@ class ModeManager(Node):
             stable_time=float(value('stable_detection_time')),
             min_detections=int(value('min_detections')),
             wait_timeout=float(value('vision_wait_timeout')),
-            target_marker_id=int(value('target_marker_id')))
+            target_marker_id=int(value('target_marker_id')),
+            auto_start=bool(value('auto_start')))
         self.cmd = self.create_publisher(Twist, '/rov_cmd_vel', 1)
         self.status = self.create_publisher(String, '/mode_manager/state', 1)
         self.requests = {}

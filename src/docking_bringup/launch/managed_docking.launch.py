@@ -23,6 +23,8 @@ def generate_launch_description():
             'docking_bringup', 'vision.yaml')),
         DeclareLaunchArgument('aruco_config', default_value=config(
             'docking_bringup', 'aruco.yaml')),
+        DeclareLaunchArgument('auto_start', default_value='true',
+                              description='Start once controllers and UWB pose are ready'),
         DeclareLaunchArgument('handoff_x', description='UWB world target x [m]'),
         DeclareLaunchArgument('handoff_y', description='UWB world target y [m]'),
         DeclareLaunchArgument('handoff_yaw', description='ZED target heading [rad]'),
@@ -31,7 +33,8 @@ def generate_launch_description():
         DeclareLaunchArgument('docking_distance', default_value='1.0'),
         Node(package='mode_manager', executable='mode_manager', output='screen',
              parameters=[LaunchConfiguration('manager_config'),
-                         {'target_marker_id': number('target_marker_id', int)}]),
+                         {'target_marker_id': number('target_marker_id', int),
+                          'auto_start': number('auto_start', bool)}]),
         Node(package='uwb_position_zed_pose_ctrl', executable='uwb_position_zed_pose_ctrl',
              output='screen', parameters=[LaunchConfiguration('uwb_controller_config'), {
                  'managed_mode': True,

@@ -37,7 +37,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 
 | 状態 | 出力・動作 | 遷移 |
 | --- | --- | --- |
-| `IDLE` | ゼロ速度。起動時の状態 | start serviceで `UWB_APPROACH` |
+| `IDLE` | ゼロ速度。起動時の状態 | 自動開始有効時は準備完了、またはstart serviceで `UWB_APPROACH` |
 | `UWB_APPROACH` | 有効なUWB指令 | 引き渡しposeに到達したら `VISION_WAIT` |
 | `VISION_WAIT` | ゼロ速度 | 到達条件と安定検出が揃ったら `VISION_DOCKING` |
 | `VISION_DOCKING` | 有効なVision指令 | 検出喪失で `UWB_RECOVERY`、完了で `DONE` |
@@ -148,6 +148,7 @@ ControllerはManagerからの要求が `manager_timeout` を超えたら無効�
 
 | Manager parameter | 初期値 | 制約・用途 |
 | --- | --- | --- |
+| `auto_start` | false | 起動時に一度だけ準備完了後に自動開始。統合launchではtrue |
 | `target_marker_id` | 0 | 0以上。Vision側と一致させる |
 | `control_rate` | 20.0 Hz | 有限・正。指令・状態・制御要求の周期 |
 | `output_timeout` | 0.5 s | 有限・正。Controller出力の有効期間と応答猶予 |
@@ -227,3 +228,11 @@ ROS統合テストはビルド済みworkspaceをsourceして実行する。イ�
 - 自動復帰回数上限、機体の停止確認、構造化した異常理由topicは今後の検討事項。
 
 関連する単体制御仕様は [UWB仕様](../../uwb_position_zed_pose_ctrl/doc/uwb_position_zed_pose_ctrl_requirements_ja.md) と [Vision仕様](../../vision_dist_ctrl/docs/requirements_ja.md) を参照する。
+
+## 10. 統合launchからの自動開始
+
+`docking.launch.py` と `managed_docking.launch.py` は `auto_start:=true` をManagerに渡す。IDLEで現在の実行IDに対応する両Controllerの新しい出力を待ち、UWBの `inputs_valid=true` とVisionの対象ID一致を確認してUWB_APPROACHへ移行する。画像・マーカーの検出は開始条件ではなく、Vision切り替え時に確認する。
+
+準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE・FAULT後も自動で再開しない。再開はstart service、手動開始運用は `auto_start:=false` を指定する。
+
+全体launchでは `start_locomotion:=true` が初期値となり、launchだけで駆動系まで起動する。駆動系なしの確認ではfalseを指定する。

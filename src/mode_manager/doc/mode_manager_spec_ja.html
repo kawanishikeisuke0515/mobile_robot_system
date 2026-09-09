@@ -8,7 +8,7 @@ main{min-width:0;background:white;border:1px solid var(--line);border-radius:16p
 @media(max-width:900px){.layout{display:block;padding:16px}nav{position:static;max-height:none;padding:8px 0 22px}nav .level-3{display:none}nav a{display:inline-block;font-size:13px}main{padding:24px 20px}h1{font-size:26px}h2{font-size:21px}.branches{grid-template-columns:1fr}.flow{padding:14px}}
 @media print{body{background:white;font-size:10pt}.layout{display:block;padding:0}nav,.eyebrow{display:none}main{border:0;box-shadow:none;padding:0}h2{break-after:avoid;margin-top:24px}tr,.step{break-inside:avoid}.table-wrap{overflow:visible}pre{white-space:pre-wrap;background:#f0f3f7;color:#203047}pre code{white-space:pre-wrap}a{color:inherit}html{scroll-behavior:auto}}
 </style></head>
-<body><div class="layout"><nav aria-label="目次"><strong>Mode Manager</strong><a class="level-2" href="#section-1">1. 目的</a><a class="level-2" href="#section-2">2. 構成と責務</a><a class="level-2" href="#section-3">3. 状態遷移</a><a class="level-3" href="#section-4">3.1 引き渡し条件</a><a class="level-3" href="#section-5">3.2 安定検出</a><a class="level-3" href="#section-6">3.3 マーカー喪失と復帰</a><a class="level-3" href="#section-7">3.4 待機・再試行</a><a class="level-2" href="#section-8">4. インターフェース</a><a class="level-3" href="#section-9">4.1 Topic</a><a class="level-3" href="#section-10">4.2 メッセージ</a><a class="level-3" href="#section-11">4.3 Service</a><a class="level-2" href="#section-12">5. 切り替えとtimeout</a><a class="level-2" href="#section-13">6. パラメータ</a><a class="level-2" href="#section-14">7. ビルドと起動</a><a class="level-2" href="#section-15">8. 検証</a><a class="level-2" href="#section-16">9. 制限と今後の確認</a></nav><main><div class="eyebrow">DESIGN SPECIFICATION · VERSION 0.2</div><h1>Mode Manager 仕様書</h1>
+<body><div class="layout"><nav aria-label="目次"><strong>Mode Manager</strong><a class="level-2" href="#section-1">1. 目的</a><a class="level-2" href="#section-2">2. 構成と責務</a><a class="level-2" href="#section-3">3. 状態遷移</a><a class="level-3" href="#section-4">3.1 引き渡し条件</a><a class="level-3" href="#section-5">3.2 安定検出</a><a class="level-3" href="#section-6">3.3 マーカー喪失と復帰</a><a class="level-3" href="#section-7">3.4 待機・再試行</a><a class="level-2" href="#section-8">4. インターフェース</a><a class="level-3" href="#section-9">4.1 Topic</a><a class="level-3" href="#section-10">4.2 メッセージ</a><a class="level-3" href="#section-11">4.3 Service</a><a class="level-2" href="#section-12">5. 切り替えとtimeout</a><a class="level-2" href="#section-13">6. パラメータ</a><a class="level-2" href="#section-14">7. ビルドと起動</a><a class="level-2" href="#section-15">8. 検証</a><a class="level-2" href="#section-16">9. 制限と今後の確認</a><a class="level-2" href="#section-17">10. 統合launchからの自動開始</a></nav><main><h1>Mode Manager 仕様書</h1>
 <p>Version: 0.2
 Date: 2026-09-08
 Status: 初版実装済み・模擬入力で検証、実機未検証</p>
@@ -64,7 +64,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <tr>
 <td><code>IDLE</code></td>
 <td>ゼロ速度。起動時の状態</td>
-<td>start serviceで <code>UWB_APPROACH</code></td>
+<td>自動開始有効時は準備完了、またはstart serviceで <code>UWB_APPROACH</code></td>
 </tr>
 <tr>
 <td><code>UWB_APPROACH</code></td>
@@ -296,6 +296,11 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 </thead>
 <tbody>
 <tr>
+<td><code>auto_start</code></td>
+<td>false</td>
+<td>起動時に一度だけ準備完了後に自動開始。統合launchではtrue</td>
+</tr>
+<tr>
 <td><code>target_marker_id</code></td>
 <td>0</td>
 <td>0以上。Vision側と一致させる</td>
@@ -414,4 +419,8 @@ ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
 <li>自動復帰回数上限、機体の停止確認、構造化した異常理由topicは今後の検討事項。</li>
 </ul>
 <p>関連する単体制御仕様は <a href="../../uwb_position_zed_pose_ctrl/doc/uwb_position_zed_pose_ctrl_requirements_ja.md">UWB仕様</a> と <a href="../../vision_dist_ctrl/docs/requirements_ja.md">Vision仕様</a> を参照する。</p>
-<p class="source">本HTMLは <a href="mode_manager_spec_ja.md">Markdown仕様書</a> の閲覧用スナップショットです。仕様変更時は両方を更新してください。</p></main></div></body></html>
+<h2 id="section-17">10. 統合launchからの自動開始</h2>
+<p><code>docking.launch.py</code> と <code>managed_docking.launch.py</code> は <code>auto_start:=true</code> をManagerに渡す。IDLEで現在の実行IDに対応する両Controllerの新しい出力を待ち、UWBの <code>inputs_valid=true</code> とVisionの対象ID一致を確認してUWB_APPROACHへ移行する。画像・マーカーの検出は開始条件ではなく、Vision切り替え時に確認する。</p>
+<p>準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE・FAULT後も自動で再開しない。再開はstart service、手動開始運用は <code>auto_start:=false</code> を指定する。</p>
+<p>全体launchでは <code>start_locomotion:=true</code> が初期値となり、launchだけで駆動系まで起動する。駆動系なしの確認ではfalseを指定する。</p>
+</main></div></body></html>

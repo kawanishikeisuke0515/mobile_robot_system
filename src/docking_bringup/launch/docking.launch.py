@@ -1,4 +1,4 @@
-"""Complete UWB/ZED/Vision docking stack, idle until the manager start service."""
+"""Complete UWB/ZED/Vision docking stack, automatic start after controller and UWB readiness."""
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.conditions import IfCondition
@@ -33,6 +33,8 @@ def generate_launch_description():
         name, default_value=config(package, filename), description=f'Parameter YAML: {name}')
         for name, (package, filename) in configs.items()]
     declarations.extend([
+        DeclareLaunchArgument('auto_start', default_value='true',
+                              description='Start once controllers and UWB pose are ready'),
         DeclareLaunchArgument('handoff_x', description='Handoff UWB/world x [m]'),
         DeclareLaunchArgument('handoff_y', description='Handoff UWB/world y [m]'),
         DeclareLaunchArgument('handoff_yaw', description='Handoff ZED heading [rad]'),
@@ -47,14 +49,14 @@ def generate_launch_description():
                               description='Start UWB serial reader and position publisher'),
         DeclareLaunchArgument('start_heading', default_value='true',
                               description='Start ZED magnetic heading publisher'),
-        DeclareLaunchArgument('start_locomotion', default_value='false',
+        DeclareLaunchArgument('start_locomotion', default_value='true',
                               description='Start rover_velocity and cmd_roboteq motor driver'),
         DeclareLaunchArgument('zed_serial_number', default_value='0',
                               description='ZED camera serial number; 0 selects wrapper default'),
     ])
     managed_args = {name: LaunchConfiguration(name) for name in (
         'handoff_x', 'handoff_y', 'handoff_yaw', 'target_marker_id',
-        'vision_target_z', 'docking_distance', 'manager_config',
+        'vision_target_z', 'docking_distance', 'manager_config', 'auto_start',
         'uwb_controller_config', 'vision_config', 'aruco_config')}
     return LaunchDescription(declarations + [
         include('zed_wrapper_data_hub', 'zed_data_hub.launch.py', {

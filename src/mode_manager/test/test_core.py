@@ -172,3 +172,39 @@ def test_stop_and_restart_while_active():
     m.stop(0.7)
     assert m.tick(0.7) == ZERO
     assert m.state == 'IDLE'
+
+
+def test_auto_start_waits_for_ready_inputs_without_startup_timeout():
+    m = ModeMachine(auto_start=True)
+    assert m.tick(100) == ZERO
+    assert m.state == 'IDLE'
+    send(m, 'uwb', 101, inputs_valid=False)
+    send(m, 'vision', 101, target_marker_id=0)
+    m.tick(101)
+    assert m.state == 'IDLE'
+    send(m, 'uwb', 102, inputs_valid=True)
+    m.tick(102)  # Vision output expired.
+    assert m.state == 'IDLE'
+    send(m, 'vision', 102, target_marker_id=99)
+    m.tick(102)
+    assert m.state == 'IDLE'
+    send(m, 'vision', 103, target_marker_id=0, tracking_valid=False)
+    send(m, 'uwb', 103, inputs_valid=True)
+    assert m.tick(103) == ZERO
+    assert m.state == 'UWB_APPROACH'
+    assert not m.auto_start_pending
+    assert m.tick(103.1) == ZERO  # New-session output is required.
+
+
+def test_auto_start_is_cancelled_by_stop_or_fault():
+    for action in ('stop', 'fault', 'done'):
+        m = ModeMachine(auto_start=True)
+        if action == 'stop':
+            m.stop(0)
+        else:
+            m.transition(action.upper(), 0, action)
+        send(m, 'uwb', 1, inputs_valid=True)
+        send(m, 'vision', 1, target_marker_id=0)
+        assert m.tick(1) == ZERO
+        assert not m.auto_start_pending
+        assert m.state != 'UWB_APPROACH'
