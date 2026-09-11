@@ -1,8 +1,8 @@
 # Mode Manager 仕様書
 
-Version: 0.2
-Date: 2026-09-08
-Status: 初版実装済み・模擬入力で検証、実機未検証
+Version: 0.3
+Date: 2026-09-10
+Status: 異常時のIDLE移行仕様を改訂。実装・テストへの反映は未実施、実機未検証
 
 ## 1. 目的
 
@@ -37,13 +37,12 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 
 | 状態 | 出力・動作 | 遷移 |
 | --- | --- | --- |
-| `IDLE` | ゼロ速度。起動時の状態 | 自動開始有効時は準備完了、またはstart serviceで `UWB_APPROACH` |
+| `IDLE` | ゼロ速度。起動時・停止時・異常中止後の状態 | 自動開始有効時は準備完了、またはstart serviceで `UWB_APPROACH` |
 | `UWB_APPROACH` | 有効なUWB指令 | 引き渡しposeに到達したら `VISION_WAIT` |
 | `VISION_WAIT` | ゼロ速度 | 到達条件と安定検出が揃ったら `VISION_DOCKING` |
 | `VISION_DOCKING` | 有効なVision指令 | 検出喪失で `UWB_RECOVERY`、完了で `DONE` |
 | `UWB_RECOVERY` | 一旦停止後、同じ引き渡しposeへUWBで復帰 | 再到達したら `VISION_WAIT` |
 | `DONE` | ゼロ速度を維持 | start serviceで新しい実行 |
-| `FAULT` | ゼロ速度を維持 | 原因解消後、start serviceで新しい実行 |
 
 ```text
 IDLE ─ start → UWB_APPROACH ─ 到達 → VISION_WAIT ─ 安定検出 → VISION_DOCKING ─ 完了 → DONE
@@ -51,7 +50,9 @@ IDLE ─ start → UWB_APPROACH ─ 到達 → VISION_WAIT ─ 安定検出 → 
                                     └── 到達 ─ UWB_RECOVERY ←──┘ 検出喪失
 ```
 
-全状態でstop serviceを受け付け、`IDLE` に戻してゼロ速度を出力する。実行中のstartは拒否する。動作中の必要なController出力の途絶、非有限な速度指令、時刻の巻き戻りは `FAULT` とする。
+全状態でstop serviceを受け付け、`IDLE` に戻してゼロ速度を出力する。実行中のstartは拒否する。動作中の必要なController出力の途絶、非有限な速度指令、時刻の巻き戻りは `IDLE` とする。
+
+初期設計では専用の異常状態を設けず、異常時は実行を中止して `IDLE` に戻す。必要なController出力のタイムアウト、採用する速度指令の非有限値（NaN / Inf）、時刻の巻き戻り、マーカー待機タイムアウトを検知した場合は、ゼロ速度を出力し、両Controllerを無効化する。中止理由はログに残す。自動開始の待機も解除し、原因が解消しても自動再開しない。再開にはstart serviceを必要とし、新しい実行IDで `UWB_APPROACH` から開始する。start自体は原因の解消を判定せず、異常が残っていれば再度中止する。
 
 ### 3.1 引き渡し条件
 
@@ -71,11 +72,11 @@ UWB Controllerが、最新かつ有効なUWB位置・ZED姿勢で、目標x/y/ya
 
 復帰途中で対象マーカーが見えても直接Visionへ切り替えない。引き渡しposeに再到達してから安定検出を確認する。UWB位置や姿勢が無効な間は復帰移動を行わない。
 
-Visionの通信途絶は明示的な検出喪失と区別し、`FAULT` で停止する。同じ出力で完了と検出喪失が報告された場合は、喪失を優先する。`DONE` に入った後の未検出では復帰を開始しない。
+Visionの通信途絶は明示的な検出喪失と区別し、`IDLE` で停止する。同じ出力で完了と検出喪失が報告された場合は、喪失を優先する。`DONE` に入った後の未検出では復帰を開始しない。
 
 ### 3.4 待機・再試行
 
-`VISION_WAIT` が `vision_wait_timeout` を超えたら `FAULT` とする。初版では自動復帰の回数上限は設けない。UWB入力が無効な場合は停止待機を継続する。異常後に勝手に再開せず、startを必要とする。
+`VISION_WAIT` が `vision_wait_timeout` に達したら実行を中止して `IDLE` に戻す。初版では自動復帰の回数上限は設けない。UWB入力が無効な場合は停止待機を継続する。異常後に勝手に再開せず、startを必要とする。
 
 ## 4. インターフェース
 
@@ -125,7 +126,7 @@ Visionの `inputs_valid` と `tracking_valid` は別に扱う。非選択中や�
 
 | Service | 型 | 動作 |
 | --- | --- | --- |
-| `/mode_manager/start` | `std_srvs/srv/Trigger` | `IDLE/DONE/FAULT` から新しいUWB移動を開始 |
+| `/mode_manager/start` | `std_srvs/srv/Trigger` | `IDLE/DONE` から新しいUWB移動を開始 |
 | `/mode_manager/stop` | `std_srvs/srv/Trigger` | 全状態から停止し `IDLE` へ移行 |
 
 ## 5. 切り替えとtimeout
@@ -140,7 +141,7 @@ UWBのリセットでは到達状態と入力受信時刻をクリアし、新�
 
 出力と要求の時刻が未来・期限切れ・重複・逆順の場合は採用しない。受信後の鮮度監視には単調時計を使用し、出力については生成から受信までの経過時間も差し引く。ノード間で同じROS時刻系を使うこと。
 
-Managerは状態遷移後に最大 `output_timeout` の応答猶予を設け、その間は新しい指令がなければゼロ速度とする。その後、必要な出力がなければ `FAULT` にする。UWB移動中はUWB、Vision中はVision、Vision待機中は両方の出力を監視する。
+Managerは状態遷移後に最大 `output_timeout` の応答猶予を設け、その間は新しい指令がなければゼロ速度とする。その後、必要な出力がなければ `IDLE` にする。UWB移動中はUWB、Vision中はVision、Vision待機中は両方の出力を監視する。
 
 ControllerはManagerからの要求が `manager_timeout` を超えたら無効化し、制御をリセットする。ゼロ速度の送信は実際の機体停止確認ではない。
 
@@ -198,6 +199,8 @@ ros2 launch mode_manager mode_manager.launch.py
 
 ## 8. 検証
 
+以下は改訂後の期待動作であり、異常時のIDLE移行については実装・既存テストを更新して検証する必要がある。原因解消だけではIDLEとゼロ速度を維持し、startで新しい実行が始まることも確認する。
+
 ROS非依存の状態機械テストと、実際のManager・両Controllerに模擬センサを入力するROSテストを用意した。カメラ・駆動ノードは起動しない。
 
 ```bash
@@ -215,15 +218,15 @@ ROS統合テストはビルド済みworkspaceをsourceして実行する。イ�
 | UWB入力無効 | 復帰中も停止する |
 | 完了後の未検出 | `DONE` を維持する |
 | 選択外・旧実行IDの指令 | 採用しない |
-| 出力timeout、非有限指令 | `FAULT` で停止する |
-| 待機中のpose逸脱、待機timeout | UWB復帰、または `FAULT` |
+| 出力timeout、非有限指令、時刻の巻き戻り | `IDLE` で停止する |
+| 待機中のpose逸脱、待機timeout | pose逸脱ではUWB復帰、待機timeoutでは実行を中止して `IDLE` |
 | 統合構成の最終速度topic | Managerのみがpublishする |
 
 ## 9. 制限と今後の確認
 
 - 実機の復帰経路、制御ゲイン、引き渡しpose、timeout設定は未検証。UWB復帰は既存の位置姿勢制御であり、経路計画や障害物回避を追加していない。
 - ArUcoメッセージに画像取得時刻がないため、Visionの検出鮮度は受信時刻ベース。画像の遅延と新しい画像を区別する拡張は未実装。
-- 未検出とカメラ入力の途絶は、どちらも検出timeoutとして扱う。Vision Controllerそのものの通信途絶は別に `FAULT` とする。
+- 未検出とカメラ入力の途絶は、どちらも検出timeoutとして扱う。Vision Controllerそのものの通信途絶は別に `IDLE` とする。
 - Managerプロセスが強制終了した場合、Controllerの無効化だけでは駆動系に最終ゼロ指令が届く保証はない。駆動側の速度指令watchdogは本変更に含めておらず、実機運用前に対応・確認が必要。
 - 自動復帰回数上限、機体の停止確認、構造化した異常理由topicは今後の検討事項。
 
@@ -233,6 +236,6 @@ ROS統合テストはビルド済みworkspaceをsourceして実行する。イ�
 
 `docking.launch.py` と `managed_docking.launch.py` は `auto_start:=true` をManagerに渡す。IDLEで現在の実行IDに対応する両Controllerの新しい出力を待ち、UWBの `inputs_valid=true` とVisionの対象ID一致を確認してUWB_APPROACHへ移行する。画像・マーカーの検出は開始条件ではなく、Vision切り替え時に確認する。
 
-準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE・FAULT後も自動で再開しない。再開はstart service、手動開始運用は `auto_start:=false` を指定する。
+準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE後および異常中止でIDLEに戻った後も自動で再開しない。再開はstart service、手動開始運用は `auto_start:=false` を指定する。
 
 全体launchでは `start_locomotion:=true` が初期値となり、launchだけで駆動系まで起動する。駆動系なしの確認ではfalseを指定する。

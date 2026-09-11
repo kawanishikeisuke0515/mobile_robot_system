@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mode Manager 仕様書 | v0.2</title><style>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Mode Manager 仕様書 | v0.3</title><style>
 :root{color-scheme:light;--ink:#203047;--muted:#52647a;--line:#dbe3ec;--blue:#175cc2}
 *{box-sizing:border-box}html{scroll-behavior:smooth;scroll-padding-top:24px}body{margin:0;background:#f3f6fa;color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans JP",sans-serif;line-height:1.85;font-size:15px}
 .layout{max-width:1440px;margin:auto;display:grid;grid-template-columns:265px minmax(0,1fr);gap:32px;padding:32px}
@@ -9,9 +9,9 @@ main{min-width:0;background:white;border:1px solid var(--line);border-radius:16p
 @media print{body{background:white;font-size:10pt}.layout{display:block;padding:0}nav,.eyebrow{display:none}main{border:0;box-shadow:none;padding:0}h2{break-after:avoid;margin-top:24px}tr,.step{break-inside:avoid}.table-wrap{overflow:visible}pre{white-space:pre-wrap;background:#f0f3f7;color:#203047}pre code{white-space:pre-wrap}a{color:inherit}html{scroll-behavior:auto}}
 </style></head>
 <body><div class="layout"><nav aria-label="目次"><strong>Mode Manager</strong><a class="level-2" href="#section-1">1. 目的</a><a class="level-2" href="#section-2">2. 構成と責務</a><a class="level-2" href="#section-3">3. 状態遷移</a><a class="level-3" href="#section-4">3.1 引き渡し条件</a><a class="level-3" href="#section-5">3.2 安定検出</a><a class="level-3" href="#section-6">3.3 マーカー喪失と復帰</a><a class="level-3" href="#section-7">3.4 待機・再試行</a><a class="level-2" href="#section-8">4. インターフェース</a><a class="level-3" href="#section-9">4.1 Topic</a><a class="level-3" href="#section-10">4.2 メッセージ</a><a class="level-3" href="#section-11">4.3 Service</a><a class="level-2" href="#section-12">5. 切り替えとtimeout</a><a class="level-2" href="#section-13">6. パラメータ</a><a class="level-2" href="#section-14">7. ビルドと起動</a><a class="level-2" href="#section-15">8. 検証</a><a class="level-2" href="#section-16">9. 制限と今後の確認</a><a class="level-2" href="#section-17">10. 統合launchからの自動開始</a></nav><main><h1>Mode Manager 仕様書</h1>
-<p>Version: 0.2
-Date: 2026-09-08
-Status: 初版実装済み・模擬入力で検証、実機未検証</p>
+<p>Version: 0.3
+Date: 2026-09-10
+Status: 異常時のIDLE移行仕様を改訂。実装・テストへの反映は未実施、実機未検証</p>
 <h2 id="section-1">1. 目的</h2>
 <p><code>mode_manager</code> はUWB・ZEDによる位置姿勢制御とVisionによるドッキング制御を切り替え、機体へ渡す速度指令を一元管理する。</p>
 <p>UWBでマーカーを正面に捉えるための引き渡し位置・姿勢まで移動し、対象マーカーの安定検出を確認してVisionへ切り替える。Vision中に対象マーカーを見失った場合は一旦停止してUWBへ戻し、同じ引き渡し位置・姿勢へ復帰してからVisionを最初から再試行する。</p>
@@ -63,7 +63,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <tbody>
 <tr>
 <td><code>IDLE</code></td>
-<td>ゼロ速度。起動時の状態</td>
+<td>ゼロ速度。起動時・停止時・異常中止後の状態</td>
 <td>自動開始有効時は準備完了、またはstart serviceで <code>UWB_APPROACH</code></td>
 </tr>
 <tr>
@@ -91,18 +91,14 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <td>ゼロ速度を維持</td>
 <td>start serviceで新しい実行</td>
 </tr>
-<tr>
-<td><code>FAULT</code></td>
-<td>ゼロ速度を維持</td>
-<td>原因解消後、start serviceで新しい実行</td>
-</tr>
 </tbody>
 </table></div>
 <pre><code class="language-text">IDLE ─ start → UWB_APPROACH ─ 到達 → VISION_WAIT ─ 安定検出 → VISION_DOCKING ─ 完了 → DONE
                                     ↑                          │
                                     └── 到達 ─ UWB_RECOVERY ←──┘ 検出喪失
 </code></pre>
-<p>全状態でstop serviceを受け付け、<code>IDLE</code> に戻してゼロ速度を出力する。実行中のstartは拒否する。動作中の必要なController出力の途絶、非有限な速度指令、時刻の巻き戻りは <code>FAULT</code> とする。</p>
+<p>全状態でstop serviceを受け付け、<code>IDLE</code> に戻してゼロ速度を出力する。実行中のstartは拒否する。動作中の必要なController出力の途絶、非有限な速度指令、時刻の巻き戻りは <code>IDLE</code> とする。</p>
+<p>初期設計では専用の異常状態を設けず、異常時は実行を中止して <code>IDLE</code> に戻す。必要なController出力のタイムアウト、採用する速度指令の非有限値（NaN / Inf）、時刻の巻き戻り、マーカー待機タイムアウトを検知した場合は、ゼロ速度を出力し、両Controllerを無効化する。中止理由はログに残す。自動開始の待機も解除し、原因が解消しても自動再開しない。再開にはstart serviceを必要とし、新しい実行IDで <code>UWB_APPROACH</code> から開始する。start自体は原因の解消を判定せず、異常が残っていれば再度中止する。</p>
 <h3 id="section-4">3.1 引き渡し条件</h3>
 <p>UWB Controllerが、最新かつ有効なUWB位置・ZED姿勢で、目標x/y/yawの許容誤差をすべて満たした場合に <code>target_reached=true</code> とする。Managerは速度ゼロから到達を推測しない。</p>
 <p><code>VISION_WAIT</code> でもUWBの到達状態を再確認する。位置・姿勢が有効で到達条件を外れた場合は <code>UWB_RECOVERY</code> へ戻す。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。</p>
@@ -112,9 +108,9 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <h3 id="section-6">3.3 マーカー喪失と復帰</h3>
 <p>対象マーカーの最後の有効な受信からVisionの <code>detection_timeout</code> を超えると <code>tracking_valid=false</code> となる。Managerは一旦ゼロ速度を出し、<code>UWB_RECOVERY</code> へ切り替える。</p>
 <p>復帰途中で対象マーカーが見えても直接Visionへ切り替えない。引き渡しposeに再到達してから安定検出を確認する。UWB位置や姿勢が無効な間は復帰移動を行わない。</p>
-<p>Visionの通信途絶は明示的な検出喪失と区別し、<code>FAULT</code> で停止する。同じ出力で完了と検出喪失が報告された場合は、喪失を優先する。<code>DONE</code> に入った後の未検出では復帰を開始しない。</p>
+<p>Visionの通信途絶は明示的な検出喪失と区別し、<code>IDLE</code> で停止する。同じ出力で完了と検出喪失が報告された場合は、喪失を優先する。<code>DONE</code> に入った後の未検出では復帰を開始しない。</p>
 <h3 id="section-7">3.4 待機・再試行</h3>
-<p><code>VISION_WAIT</code> が <code>vision_wait_timeout</code> を超えたら <code>FAULT</code> とする。初版では自動復帰の回数上限は設けない。UWB入力が無効な場合は停止待機を継続する。異常後に勝手に再開せず、startを必要とする。</p>
+<p><code>VISION_WAIT</code> が <code>vision_wait_timeout</code> に達したら実行を中止して <code>IDLE</code> に戻す。初版では自動復帰の回数上限は設けない。UWB入力が無効な場合は停止待機を継続する。異常後に勝手に再開せず、startを必要とする。</p>
 <h2 id="section-8">4. インターフェース</h2>
 <h3 id="section-9">4.1 Topic</h3>
 <div class="table-wrap"><table>
@@ -264,7 +260,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <tr>
 <td><code>/mode_manager/start</code></td>
 <td><code>std_srvs/srv/Trigger</code></td>
-<td><code>IDLE/DONE/FAULT</code> から新しいUWB移動を開始</td>
+<td><code>IDLE/DONE</code> から新しいUWB移動を開始</td>
 </tr>
 <tr>
 <td><code>/mode_manager/stop</code></td>
@@ -283,7 +279,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 </ol>
 <p>UWBのリセットでは到達状態と入力受信時刻をクリアし、新しい位置・姿勢入力を待つ。Visionのリセットでは <code>PRE_DOCKING</code> に戻し、完了状態と制御用位置平均をクリアする。観測用の最終検出時刻と検出カウンタは保持する。</p>
 <p>出力と要求の時刻が未来・期限切れ・重複・逆順の場合は採用しない。受信後の鮮度監視には単調時計を使用し、出力については生成から受信までの経過時間も差し引く。ノード間で同じROS時刻系を使うこと。</p>
-<p>Managerは状態遷移後に最大 <code>output_timeout</code> の応答猶予を設け、その間は新しい指令がなければゼロ速度とする。その後、必要な出力がなければ <code>FAULT</code> にする。UWB移動中はUWB、Vision中はVision、Vision待機中は両方の出力を監視する。</p>
+<p>Managerは状態遷移後に最大 <code>output_timeout</code> の応答猶予を設け、その間は新しい指令がなければゼロ速度とする。その後、必要な出力がなければ <code>IDLE</code> にする。UWB移動中はUWB、Vision中はVision、Vision待機中は両方の出力を監視する。</p>
 <p>ControllerはManagerからの要求が <code>manager_timeout</code> を超えたら無効化し、制御をリセットする。ゼロ速度の送信は実際の機体停止確認ではない。</p>
 <h2 id="section-13">6. パラメータ</h2>
 <div class="table-wrap"><table>
@@ -356,6 +352,7 @@ ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
 </code></pre>
 <p>このlaunchは <code>params_file</code> でYAMLを指定できる。単独ではControllerを起動しないため、別途対応するControllerが必要。</p>
 <h2 id="section-15">8. 検証</h2>
+<p>以下は改訂後の期待動作であり、異常時のIDLE移行については実装・既存テストを更新して検証する必要がある。原因解消だけではIDLEとゼロ速度を維持し、startで新しい実行が始まることも確認する。</p>
 <p>ROS非依存の状態機械テストと、実際のManager・両Controllerに模擬センサを入力するROSテストを用意した。カメラ・駆動ノードは起動しない。</p>
 <pre><code class="language-bash">python -m pytest -q src/mode_manager/test
 </code></pre>
@@ -397,12 +394,12 @@ ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
 <td>採用しない</td>
 </tr>
 <tr>
-<td>出力timeout、非有限指令</td>
-<td><code>FAULT</code> で停止する</td>
+<td>出力timeout、非有限指令、時刻の巻き戻り</td>
+<td><code>IDLE</code> で停止する</td>
 </tr>
 <tr>
 <td>待機中のpose逸脱、待機timeout</td>
-<td>UWB復帰、または <code>FAULT</code></td>
+<td>pose逸脱ではUWB復帰、待機timeoutでは実行を中止して <code>IDLE</code></td>
 </tr>
 <tr>
 <td>統合構成の最終速度topic</td>
@@ -414,13 +411,13 @@ ros2 service call /mode_manager/stop std_srvs/srv/Trigger '{}'
 <ul>
 <li>実機の復帰経路、制御ゲイン、引き渡しpose、timeout設定は未検証。UWB復帰は既存の位置姿勢制御であり、経路計画や障害物回避を追加していない。</li>
 <li>ArUcoメッセージに画像取得時刻がないため、Visionの検出鮮度は受信時刻ベース。画像の遅延と新しい画像を区別する拡張は未実装。</li>
-<li>未検出とカメラ入力の途絶は、どちらも検出timeoutとして扱う。Vision Controllerそのものの通信途絶は別に <code>FAULT</code> とする。</li>
+<li>未検出とカメラ入力の途絶は、どちらも検出timeoutとして扱う。Vision Controllerそのものの通信途絶は別に <code>IDLE</code> とする。</li>
 <li>Managerプロセスが強制終了した場合、Controllerの無効化だけでは駆動系に最終ゼロ指令が届く保証はない。駆動側の速度指令watchdogは本変更に含めておらず、実機運用前に対応・確認が必要。</li>
 <li>自動復帰回数上限、機体の停止確認、構造化した異常理由topicは今後の検討事項。</li>
 </ul>
 <p>関連する単体制御仕様は <a href="../../uwb_position_zed_pose_ctrl/doc/uwb_position_zed_pose_ctrl_requirements_ja.md">UWB仕様</a> と <a href="../../vision_dist_ctrl/docs/requirements_ja.md">Vision仕様</a> を参照する。</p>
 <h2 id="section-17">10. 統合launchからの自動開始</h2>
 <p><code>docking.launch.py</code> と <code>managed_docking.launch.py</code> は <code>auto_start:=true</code> をManagerに渡す。IDLEで現在の実行IDに対応する両Controllerの新しい出力を待ち、UWBの <code>inputs_valid=true</code> とVisionの対象ID一致を確認してUWB_APPROACHへ移行する。画像・マーカーの検出は開始条件ではなく、Vision切り替え時に確認する。</p>
-<p>準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE・FAULT後も自動で再開しない。再開はstart service、手動開始運用は <code>auto_start:=false</code> を指定する。</p>
+<p>準備待ちには起動timeoutを適用せず、速度ゼロで待つ。自動開始は起動時の一度だけで、stopは待機中の自動開始も取り消す。DONE後および異常中止でIDLEに戻った後も自動で再開しない。再開はstart service、手動開始運用は <code>auto_start:=false</code> を指定する。</p>
 <p>全体launchでは <code>start_locomotion:=true</code> が初期値となり、launchだけで駆動系まで起動する。駆動系なしの確認ではfalseを指定する。</p>
 </main></div></body></html>
