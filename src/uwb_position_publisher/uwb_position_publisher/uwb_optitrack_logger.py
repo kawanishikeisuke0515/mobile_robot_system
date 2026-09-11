@@ -18,61 +18,12 @@ from rclpy.qos import ReliabilityPolicy
 
 from uwb_interfaces.msg import UwbDistances
 
+from uwb_position_publisher.trilateration import trilaterate_2d
+
 
 def stamp_to_sec(stamp) -> float:
     """Convert a ROS time stamp message to seconds."""
     return float(stamp.sec) + float(stamp.nanosec) * 1e-9
-
-
-def trilaterate_2d(
-    anchor_1: tuple[float, float],
-    anchor_2: tuple[float, float],
-    anchor_3: tuple[float, float],
-    distance_1: float,
-    distance_2: float,
-    distance_3: float,
-    min_determinant: float,
-) -> Optional[tuple[float, float]]:
-    """Estimate a 2D position from three anchor distances."""
-    if not (
-        math.isfinite(distance_1)
-        and math.isfinite(distance_2)
-        and math.isfinite(distance_3)
-    ):
-        return None
-
-    x1, y1 = anchor_1
-    x2, y2 = anchor_2
-    x3, y3 = anchor_3
-
-    a11 = 2.0 * (x2 - x1)
-    a12 = 2.0 * (y2 - y1)
-    a21 = 2.0 * (x3 - x1)
-    a22 = 2.0 * (y3 - y1)
-    b1 = (
-        distance_1 ** 2
-        - distance_2 ** 2
-        - x1 ** 2
-        + x2 ** 2
-        - y1 ** 2
-        + y2 ** 2
-    )
-    b2 = (
-        distance_1 ** 2
-        - distance_3 ** 2
-        - x1 ** 2
-        + x3 ** 2
-        - y1 ** 2
-        + y3 ** 2
-    )
-
-    determinant = a11 * a22 - a12 * a21
-    if abs(determinant) <= min_determinant:
-        return None
-
-    x = (b1 * a22 - a12 * b2) / determinant
-    y = (a11 * b2 - b1 * a21) / determinant
-    return x, y
 
 
 class UwbOptitrackLogger(Node):
@@ -96,6 +47,8 @@ class UwbOptitrackLogger(Node):
         self.declare_parameter('anchor_2_y', 0.0)
         self.declare_parameter('anchor_3_x', 0.0)
         self.declare_parameter('anchor_3_y', 1.0)
+        for i in range(1, 4):
+            self.declare_parameter(f'anchor_{i}_height_difference_m', 0.0)
         self.declare_parameter('min_anchor_determinant', 1.0e-9)
 
         self.output_dir = str(self.get_parameter('output_dir').value)
@@ -118,6 +71,10 @@ class UwbOptitrackLogger(Node):
         self.anchor_3 = (
             float(self.get_parameter('anchor_3_x').value),
             float(self.get_parameter('anchor_3_y').value),
+        )
+        self.height_differences = tuple(
+            float(self.get_parameter(f'anchor_{i}_height_difference_m').value)
+            for i in range(1, 4)
         )
         self.min_anchor_determinant = float(
             self.get_parameter('min_anchor_determinant').value
@@ -185,6 +142,8 @@ class UwbOptitrackLogger(Node):
         )
 
     def _validate_parameters(self):
+        if not all(math.isfinite(h) for h in self.height_differences):
+            raise ValueError('anchor height differences must be finite')
         if self.log_rate <= 0.0:
             raise ValueError('log_rate must be greater than 0')
         if self.flush_every_rows <= 0:
@@ -330,6 +289,7 @@ class UwbOptitrackLogger(Node):
             float(uwb.anchor_2_distance_m),
             float(uwb.anchor_3_distance_m),
             self.min_anchor_determinant,
+            self.height_differences,
         )
 
     def _format_optional_stamp(self, stamp) -> str:

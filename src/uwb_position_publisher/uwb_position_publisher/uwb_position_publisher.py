@@ -10,55 +10,11 @@ from rclpy.node import Node
 from uwb_interfaces.msg import UwbDistances
 from uwb_interfaces.msg import UwbPosition
 
+from uwb_position_publisher.trilateration import trilaterate_2d
+
 
 def is_finite(*values: float) -> bool:
     return all(math.isfinite(value) for value in values)
-
-
-def trilaterate_2d(
-    anchor_1: Tuple[float, float],
-    anchor_2: Tuple[float, float],
-    anchor_3: Tuple[float, float],
-    distance_1: float,
-    distance_2: float,
-    distance_3: float,
-    min_determinant: float,
-) -> Optional[Tuple[float, float]]:
-    if not is_finite(distance_1, distance_2, distance_3):
-        return None
-
-    x1, y1 = anchor_1
-    x2, y2 = anchor_2
-    x3, y3 = anchor_3
-
-    a11 = 2.0 * (x2 - x1)
-    a12 = 2.0 * (y2 - y1)
-    a21 = 2.0 * (x3 - x1)
-    a22 = 2.0 * (y3 - y1)
-    b1 = (
-        distance_1 ** 2
-        - distance_2 ** 2
-        - x1 ** 2
-        + x2 ** 2
-        - y1 ** 2
-        + y2 ** 2
-    )
-    b2 = (
-        distance_1 ** 2
-        - distance_3 ** 2
-        - x1 ** 2
-        + x3 ** 2
-        - y1 ** 2
-        + y3 ** 2
-    )
-
-    determinant = a11 * a22 - a12 * a21
-    if abs(determinant) <= min_determinant:
-        return None
-
-    x = (b1 * a22 - a12 * b2) / determinant
-    y = (a11 * b2 - b1 * a21) / determinant
-    return x, y
 
 
 def build_position_message(
@@ -67,6 +23,7 @@ def build_position_message(
     anchor_2: Tuple[float, float],
     anchor_3: Tuple[float, float],
     min_determinant: float,
+    height_differences: Tuple[float, float, float] = (0.0, 0.0, 0.0),
 ) -> UwbPosition:
     msg = UwbPosition()
     msg.header = distances_msg.header
@@ -91,6 +48,7 @@ def build_position_message(
         float(distances_msg.anchor_2_distance_m),
         float(distances_msg.anchor_3_distance_m),
         min_determinant,
+        height_differences,
     )
     if position is None:
         msg.x_m = math.nan
@@ -177,6 +135,8 @@ class UwbPositionPublisher(Node):
         self.declare_parameter('anchor_2_y', 0.0)
         self.declare_parameter('anchor_3_x', 0.0)
         self.declare_parameter('anchor_3_y', 1.0)
+        for i in range(1, 4):
+            self.declare_parameter(f'anchor_{i}_height_difference_m', 0.0)
         self.declare_parameter('min_anchor_determinant', 1.0e-9)
         self.declare_parameter('moving_average_window', 5)
         self.declare_parameter('max_position_jump_m', 1.0)
@@ -199,6 +159,10 @@ class UwbPositionPublisher(Node):
         self.anchor_3 = (
             float(self.get_parameter('anchor_3_x').value),
             float(self.get_parameter('anchor_3_y').value),
+        )
+        self.height_differences = tuple(
+            float(self.get_parameter(f'anchor_{i}_height_difference_m').value)
+            for i in range(1, 4)
         )
         self.min_anchor_determinant = float(
             self.get_parameter('min_anchor_determinant').value
@@ -254,6 +218,8 @@ class UwbPositionPublisher(Node):
         )
 
     def _validate_parameters(self):
+        if not all(math.isfinite(h) for h in self.height_differences):
+            raise ValueError('anchor height differences must be finite')
         if self.uwb_distances_topic == '':
             raise ValueError('uwb_distances_topic must not be empty')
         if self.uwb_position_topic == '':
@@ -284,6 +250,7 @@ class UwbPositionPublisher(Node):
             self.anchor_2,
             self.anchor_3,
             self.min_anchor_determinant,
+            self.height_differences,
         )
         position_msg = self.position_filter.filter(position_msg)
         self.publisher_.publish(position_msg)
