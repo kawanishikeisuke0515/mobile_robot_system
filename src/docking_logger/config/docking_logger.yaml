@@ -1,0 +1,20 @@
+docking_logger:
+  ros__parameters:
+    log_rate: 20.0
+    flush_interval_sec: 1.0
+    stale_timeout_sec: 1.0
+    queue_capacity: 10000
+    qos_depth: 100
+    # target_marker_id is required via launch or --ros-args.
+    cmd_vel_topic: /rov_cmd_vel
+    motor_commands_topic: /rov/motors
+    deadman_topic: /deadman
+    uwb_topic: /uwb/position
+    zed_heading_topic: /zed/heading
+    optitrack_pose_topic: /vrpn_mocap/RigidBody_1/pose
+    vision_topic: /aruco/distance
+    control_state_topic: /mode_manager/state
+    uwb_control_output_topic: /uwb/control_output
+    vision_control_output_topic: /vision/control_output
+    optitrack_reliability: best_effort
+    # Per-stream overrides: <stream>_reliability and <stream>_stale_timeout_sec.

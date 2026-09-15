@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>docking_logger</name>
+  <version>0.0.0</version>
+  <description>Asynchronous docking telemetry CSV logger.</description>
+  <maintainer email="user@example.com">user</maintainer>
+  <license>Apache-2.0</license>
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
+  <exec_depend>geometry_msgs</exec_depend>
+  <exec_depend>std_msgs</exec_depend>
+  <exec_depend>uwb_interfaces</exec_depend>
+  <exec_depend>zed_interfaces</exec_depend>
+  <exec_depend>aruco_interfaces</exec_depend>
+  <exec_depend>mode_manager_interfaces</exec_depend>
+  <exec_depend>python3-yaml</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
+  <test_depend>python3-pytest</test_depend>
+  <export><build_type>ament_python</build_type></export>
+</package>

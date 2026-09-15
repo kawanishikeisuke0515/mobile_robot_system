@@ -88,3 +88,35 @@ YAMLよりlaunch引数の引き渡しpose・対象ID・`vision_target_z`（初�
 全体launchとmanaged launchは `auto_start:=true` が初期値。準備待ち中は速度ゼロで待機し、起動時の応答遅延だけではFAULTにしない。開始時に実行IDを更新し、リセット後の新しい制御指令を待つ。開始後の通信timeout監視は従来どおり。
 
 stop serviceは準備待ち中の自動開始も取り消す。停止・完了・FAULT後に自動で再開せず、再開する場合は `/mode_manager/start` を呼ぶ。手動開始にしたい場合はlaunchに `auto_start:=false` を指定する。Manager単体起動時のパラメータ初期値はfalse。
+
+
+## 実験ログ
+
+`docking_logger` を標準で起動し、速度・モーター指令、UWB位置、ZED heading、OptiTrack、Vision、制御状態を記録する。
+
+```bash
+ros2 launch docking_bringup docking.launch.py \
+  handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7 \
+  log_dir:=$HOME/docking_logs experiment_name:=trial_01
+```
+
+Excelで比較するファイルは、保存先の実験ディレクトリ内の **`timeline.csv`**。
+20 Hzで各トピックの最新値を同じ行へまとめる。`elapsed_sec` をグラフの横軸に使う。
+計測自体は同時ではなく、各列の `age_sec` / `stale` / `received` で鮮度を確認する。
+受信ごとの個別CSVと設定スナップショット `metadata.yaml` も保存する。
+
+- `enable_logging:=false`：ロガーを起動しない。
+- `logger_config:=/absolute/path/logger.yaml`：記録周期、トピック、QoSなどを変更。
+- `experiment_note:="実験メモ"`：metadataへメモを保存。
+- OptiTrack初期値：`/vrpn_mocap/RigidBody_1/pose`。
+- 起動時の保存先通知を確認する。記録失敗時もロボットの制御は継続する。
+- 初回指令から確実に記録したい場合は `auto_start:=false` で起動し、ロガー準備後にstart serviceを呼ぶ。
+
+ロガーだけ途中から起動する場合（bringup側のロガーとの重複起動を避ける）：
+
+```bash
+ros2 launch docking_logger docking_logger.launch.py \
+  target_marker_id:=7 log_dir:=$HOME/docking_logs experiment_name:=trial_01
+```
+
+詳細は [Docking Logger仕様書](../../docking_logger/doc/docking_logger_spec_ja.md) を参照。

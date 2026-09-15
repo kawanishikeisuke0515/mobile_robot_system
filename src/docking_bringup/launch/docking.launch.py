@@ -1,10 +1,13 @@
 """Complete UWB/ZED/Vision docking stack, automatic start after controller and UWB readiness."""
+import json
+
 from launch import LaunchDescription
-from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
+from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription, OpaqueFunction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node
+from launch_ros.parameter_descriptions import ParameterValue
 from launch_ros.substitutions import FindPackageShare
 
 
@@ -32,7 +35,14 @@ def generate_launch_description():
     declarations = [DeclareLaunchArgument(
         name, default_value=config(package, filename), description=f'Parameter YAML: {name}')
         for name, (package, filename) in configs.items()]
+    configs['logger_config'] = ('docking_logger', 'docking_logger.yaml')
+    declarations.append(DeclareLaunchArgument(
+        'logger_config', default_value=config('docking_logger', 'docking_logger.yaml')))
     declarations.extend([
+        DeclareLaunchArgument('enable_logging', default_value='true'),
+        DeclareLaunchArgument('log_dir', default_value='~/docking_logs'),
+        DeclareLaunchArgument('experiment_name', default_value='docking'),
+        DeclareLaunchArgument('experiment_note', default_value=''),
         DeclareLaunchArgument('auto_start', default_value='true',
                               description='Start once controllers and UWB pose are ready'),
         DeclareLaunchArgument('handoff_x', description='Handoff UWB/world x [m]'),
@@ -58,7 +68,28 @@ def generate_launch_description():
         'handoff_x', 'handoff_y', 'handoff_yaw', 'target_marker_id',
         'vision_target_z', 'docking_distance', 'manager_config', 'auto_start',
         'uwb_controller_config', 'vision_config', 'aruco_config')}
+    def start_logger(context):
+        def value(name):
+            return LaunchConfiguration(name).perform(context)
+
+        paths = {name: value(name) for name in configs}
+        overrides = {name: value(name) for name in (
+            'auto_start', 'handoff_x', 'handoff_y', 'handoff_yaw', 'target_marker_id',
+            'vision_target_z', 'docking_distance', 'start_zed', 'start_uwb',
+            'start_heading', 'start_locomotion', 'zed_serial_number')}
+        return [Node(
+            package='docking_logger', executable='docking_logger', name='docking_logger',
+            output='screen', parameters=[paths['logger_config'], {
+                'target_marker_id': int(value('target_marker_id')),
+                'log_dir': ParameterValue(value('log_dir'), value_type=str),
+                'experiment_name': ParameterValue(value('experiment_name'), value_type=str),
+                'experiment_note': ParameterValue(value('experiment_note'), value_type=str),
+                'config_paths_json': ParameterValue(json.dumps(paths), value_type=str),
+                'launch_overrides_json': ParameterValue(json.dumps(overrides), value_type=str),
+            }])]
+
     return LaunchDescription(declarations + [
+        OpaqueFunction(function=start_logger, condition=IfCondition(LaunchConfiguration('enable_logging'))),
         include('zed_wrapper_data_hub', 'zed_data_hub.launch.py', {
             'camera_name': 'zed2i', 'camera_model': 'zed2i',
             'namespace': '', 'node_name': 'zed_node',

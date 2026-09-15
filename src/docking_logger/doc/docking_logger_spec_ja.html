@@ -1,0 +1,413 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Docking Logger 仕様書</title>
+<style>
+:root { color-scheme: light; font-family: system-ui, -apple-system, "Noto Sans JP", sans-serif; color: #1e293b; background: #f1f5f9; }
+body { margin: 0; line-height: 1.8; }
+main { max-width: 1100px; margin: 32px auto; padding: 40px; background: white; border-radius: 12px; }
+h1 { font-size: 2rem; border-bottom: 3px solid #2563eb; padding-bottom: 16px; }
+h2 { margin-top: 48px; border-bottom: 1px solid #cbd5e1; padding-bottom: 8px; }
+h3 { margin-top: 28px; }
+a { color: #1d4ed8; }
+code { font-family: ui-monospace, monospace; background: #f1f5f9; padding: 2px 5px; border-radius: 4px; overflow-wrap: anywhere; }
+pre { padding: 20px; background: #0f172a; color: #e2e8f0; overflow-x: auto; border-radius: 8px; line-height: 1.6; }
+pre code { background: none; padding: 0; overflow-wrap: normal; }
+.table-wrap { overflow-x: auto; margin: 20px 0; }
+table { border-collapse: collapse; width: 100%; font-size: .92rem; }
+th, td { border: 1px solid #cbd5e1; text-align: left; padding: 10px 12px; vertical-align: top; min-width: 100px; }
+th { background: #e2e8f0; }
+tr:nth-child(even) td { background: #f8fafc; }
+li { margin: 5px 0; }
+.source { color: #64748b; font-size: .9rem; }
+@media (max-width: 700px) { main { margin: 0; padding: 20px 16px; border-radius: 0; } h1 { font-size: 1.6rem; } }
+@media print { :root { background: white; } main { margin: 0; padding: 0; max-width: none; } pre { white-space: pre-wrap; background: #f1f5f9; color: #1e293b; } .table-wrap { overflow: visible; } th, td { min-width: 0; } h2, h3 { break-after: avoid; } }
+</style>
+</head>
+<body><main>
+<p class="source">原本：<a href="docking_logger_spec_ja.md">docking_logger_spec_ja.md</a></p>
+<h1>Docking Logger 仕様書</h1>
+<h2>1. 目的と状態</h2>
+<p><code>docking_bringup</code> 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。</p>
+<p>本書は初版の実装仕様。専用の <code>docking_logger</code> パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の <code>uwb_optitrack_logger</code> に合わせる。以下の初期値・詳細設計を初版の実装基準とする。</p>
+<h2>2. 配置と責務</h2>
+<pre><code class="language-text">mobile_robot_system/src/docking_logger/
+├── docking_logger/
+│   ├── __init__.py
+│   └── docking_logger.py
+├── config/docking_logger.yaml
+├── launch/docking_logger.launch.py
+├── doc/docking_logger_spec_ja.md
+├── resource/docking_logger
+├── package.xml
+├── setup.py
+└── setup.cfg
+</code></pre>
+<ul>
+<li>ノード名・実行ファイル名は <code>docking_logger</code>。</li>
+<li><code>docking_bringup</code> は起動の取りまとめ、ロガーは購読・保存を担当する。</li>
+<li>ロガー単体で起動し、既に動作しているシステムの記録を途中から開始できる。</li>
+<li>既存のセンサ・制御・モータードライバの処理は変更しない。</li>
+<li>速度指令のpublishや開始・停止serviceの呼び出しを行わない。</li>
+<li>ファイル書き込みはロガー内の専用スレッドで処理する。</li>
+</ul>
+<h2>3. 記録対象</h2>
+<p>トピック名はすべてパラメータで変更可能とする。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>対象</th>
+<th>初期トピック</th>
+<th>型</th>
+<th>記録する内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>最終速度指令</td>
+<td><code>/rov_cmd_vel</code></td>
+<td><code>geometry_msgs/msg/Twist</code></td>
+<td>linear x/y/z、angular x/y/z</td>
+</tr>
+<tr>
+<td>モーター指令</td>
+<td><code>/rov/motors</code></td>
+<td><code>std_msgs/msg/Float32MultiArray</code></td>
+<td>4要素の指令値、受信要素数</td>
+</tr>
+<tr>
+<td>駆動許可</td>
+<td><code>/deadman</code></td>
+<td><code>std_msgs/msg/Bool</code></td>
+<td>data</td>
+</tr>
+<tr>
+<td>UWB位置</td>
+<td><code>/uwb/position</code></td>
+<td><code>uwb_interfaces/msg/UwbPosition</code></td>
+<td>x_m、y_m、valid、device_time_ms、header</td>
+</tr>
+<tr>
+<td>ZED heading</td>
+<td><code>/zed/heading</code></td>
+<td><code>zed_interfaces/msg/ZedHeading</code></td>
+<td>raw_x/z、corrected_x/z、magnetic_heading_deg、robot_yaw_deg/rad、valid、header</td>
+</tr>
+<tr>
+<td>OptiTrack</td>
+<td><code>/vrpn_mocap/RigidBody_1/pose</code></td>
+<td><code>geometry_msgs/msg/PoseStamped</code></td>
+<td>position x/y/z、quaternion x/y/z/w、header</td>
+</tr>
+<tr>
+<td>Vision</td>
+<td><code>/aruco/distance</code></td>
+<td><code>aruco_interfaces/msg/ArucoDistance</code></td>
+<td>id、x/y/z、distance、theta、yaw、center_u/v、normalized_center_error</td>
+</tr>
+<tr>
+<td>Manager状態</td>
+<td><code>/mode_manager/state</code></td>
+<td><code>std_msgs/msg/String</code></td>
+<td>状態文字列</td>
+</tr>
+<tr>
+<td>UWB制御出力</td>
+<td><code>/uwb/control_output</code></td>
+<td><code>mode_manager_interfaces/msg/ControllerOutput</code></td>
+<td>全フィールド</td>
+</tr>
+<tr>
+<td>Vision制御出力</td>
+<td><code>/vision/control_output</code></td>
+<td><code>mode_manager_interfaces/msg/ControllerOutput</code></td>
+<td>全フィールド</td>
+</tr>
+</tbody>
+</table></div>
+<p><code>ControllerOutput</code> は stamp、session_id、active、inputs_valid、target_reached、tracking_valid、docking_complete、target_marker_id、detection_sequence、command（Twist全要素）を保存する。</p>
+<h3>3.1 モーター指令の意味</h3>
+<p>現在の指令経路は次のとおり。</p>
+<pre><code class="language-text">/rov_cmd_vel → rover_velocity → /rov/motors → cmd_roboteq → モーターコントローラ
+</code></pre>
+<p><code>/rov/motors</code> はドライバ入力値であり、ドライバ内の整数化・符号反転・停止処理より前の値である。シリアル送信成功や実回転速度を示すものではない。単位を実測RPMと断定しない。</p>
+<p>配列は <code>motor_0</code> ～ <code>motor_3</code> として保存する。現在のドライバでは0/1が前側コントローラのチャンネル1/2、2/3が後側のチャンネル1/2に対応する。左右の車輪名は推測で付けない。要素数が4以外の場合も受信を記録し、<code>shape_valid=false</code> とする。元の全配列を <code>data_json</code> 列に残す。</p>
+<h3>3.2 Visionの扱い</h3>
+<ul>
+<li>全マーカーの受信を <code>vision.csv</code> に保存する。</li>
+<li>比較用一覧には設定された <code>target_marker_id</code> の最新値だけを採用する。</li>
+<li>別IDの受信では対象マーカーの鮮度を更新しない。</li>
+<li>対象マーカーが見えなくなった場合は最終値の経過時間で判定する。ゼロ位置に置き換えない。</li>
+</ul>
+<h2>4. 保存形式</h2>
+<pre><code class="language-text">&lt;log_dir&gt;/&lt;UTC開始日時&gt;_&lt;experiment_name&gt;_&lt;一意な識別子&gt;/
+├── metadata.yaml
+├── cmd_vel.csv
+├── motor_commands.csv
+├── deadman.csv
+├── uwb.csv
+├── zed_heading.csv
+├── optitrack.csv
+├── vision.csv
+├── control_state.csv
+├── uwb_control_output.csv
+├── vision_control_output.csv
+└── timeline.csv
+</code></pre>
+<ul>
+<li>起動ごとに保存ディレクトリを作成し、既存ログを上書きしない。</li>
+<li>UTF-8、ヘッダー付きCSVとする。文字列は標準CSVの引用規則に従う。</li>
+<li>boolは <code>true</code> / <code>false</code>、未受信・該当しない項目は空欄、非有限値は <code>nan</code> / <code>inf</code> / <code>-inf</code> として保存する。</li>
+<li>時刻のナノ秒値は整数で保存する。浮動小数点値は不要な桁丸めを行わない。</li>
+</ul>
+<h3>4.1 個別CSV</h3>
+<p>各購読callbackで受信イベントを作り、受信ごとに1行記録する。一定周期で間引かない。ただしROS通信や書き込みキューで発生した欠落まで完全保存を保証するものではない。</p>
+<p>共通列は以下とする。</p>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>列</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sample_seq</code></td>
+<td>ロガーが対象ストリームに付ける受信連番</td>
+</tr>
+<tr>
+<td><code>recv_ros_time_ns</code></td>
+<td>callbackで取得したROS受信時刻</td>
+</tr>
+<tr>
+<td><code>elapsed_sec</code></td>
+<td>単調時計によるロガー開始からの経過時間</td>
+</tr>
+<tr>
+<td><code>source_stamp_ns</code></td>
+<td>header.stampまたはstamp。時刻フィールドがなければ空欄</td>
+</tr>
+<tr>
+<td><code>frame_id</code></td>
+<td>元メッセージのheader.frame_id。なければ空欄</td>
+</tr>
+</tbody>
+</table></div>
+<p>この共通列に、3章の対象ごとの列を追加する。元のvalidフラグや時刻は加工せず保存する。</p>
+<h3>4.2 比較用 <code>timeline.csv</code></h3>
+<ul>
+<li>初期値20 Hzで、その時点の各ストリームの最新値を1行にまとめる。</li>
+<li>行に <code>row_seq</code>、<code>row_ros_time_ns</code>、<code>elapsed_sec</code> を持たせる。</li>
+<li>各ストリームに接頭辞を付け、個別CSVの値と共通列を展開する。</li>
+<li>各ストリームに <code>received</code>、<code>age_sec</code>、<code>stale</code>、<code>value_valid</code> を追加する。</li>
+<li><code>age_sec</code> は単調時計で測った最終受信からの時間。初回未受信時は空欄。</li>
+<li><code>stale</code> は <code>age_sec &gt; stale_timeout_sec</code> でtrue。未受信時は空欄。</li>
+<li><code>value_valid</code> はUWB/ZEDでは元のvalidと必要な数値の有限性、モーターでは要素数と有限性、OptiTrackでは有限値と非ゼロquaternion、Visionでは位置・角度の有限性で判定する。</li>
+<li>有効性が定義されない状態文字列等では <code>value_valid</code> を空欄にする。制御出力の各フラグは独立して保存する。</li>
+<li>古い値も残すが、鮮度列で識別可能とする。未受信の値は空欄。</li>
+<li>厳密な時刻同期、補間、座標変換は行わない。同じ行でも各センサの計測時刻は異なる。</li>
+</ul>
+<h3>4.3 実験設定 <code>metadata.yaml</code></h3>
+<p>次を保存する。</p>
+<ul>
+<li>スキーマバージョン、記録ID、実験名、実験メモ、UTC開始日時。</li>
+<li>ロガーパラメータ、実際の購読トピック・型・QoS、時刻の扱い。</li>
+<li>目標handoff x/y/yaw、target_marker_id、vision_target_z、docking_distance。</li>
+<li>bringupが使用した設定ファイルのパスと内容のスナップショット、launch引数による上書き値。</li>
+<li>座標系・単位と、判明している取り付け位置や変換情報。</li>
+<li>正常終了時に終了日時、各CSVの保存行数、キュー破棄数、記録エラー、終了状態を追記する。</li>
+</ul>
+<p>bringup起動時は設定ファイルと上書き値をロガーへ渡す。単体起動では外部ノードの実効設定を自動取得したと見なさず、提供されない設定は不明として記録する。設定値の動的変更の追跡は初版の対象外。</p>
+<p>初期状態は <code>recording</code> とし、正常終了時に <code>completed</code> に更新する。異常終了で更新されなかった場合に正常完了と誤認しない構成にする。metadata更新は一時ファイルからの置換で行う。</p>
+<h2>5. 時刻と座標系</h2>
+<ul>
+<li>ROS受信時刻、メッセージ内時刻、単調時計による経過時間を区別する。</li>
+<li>現在のTwist、モーター指令、deadman、Vision、Manager状態には計測時刻がない。受信時刻を計測時刻として表記しない。</li>
+<li>source stampが0の場合も元の0を保存する。別マシンの時計の同期はロガーが保証しない。</li>
+<li>初版は現在のbringupと同じ実時間運用を対象とする。sim time／bag再生での運用は対象外。</li>
+<li>UWBはアンカー定義に基づくx/y［m］、ZED headingは設定されたyaw基準を維持する。</li>
+<li>OptiTrackは元のposition［m］とquaternion、frame_idを保存する。</li>
+<li>Visionはカメラから見たマーカーの相対位置［m］。OpenCVの右x・下y・前zであり、ロボットの世界座標位置ではない。theta/yawは現実装のradを保存する。</li>
+<li>UWB・OptiTrack・Vision間の座標合わせや、センサ取り付け位置の補正、位置誤差の算出は後処理で行う。変換未設定の座標を直接差し引かない。</li>
+</ul>
+<h2>6. 起動・終了とパラメータ</h2>
+<h3>6.1 主な初期値</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>パラメータ</th>
+<th>初期値</th>
+<th>意味</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>enable_logging</code></td>
+<td><code>true</code></td>
+<td>bringup側のロガー起動可否</td>
+</tr>
+<tr>
+<td><code>log_dir</code></td>
+<td><code>~/docking_logs</code></td>
+<td>保存先。ホームを展開してmetadataに絶対パスを記録</td>
+</tr>
+<tr>
+<td><code>experiment_name</code></td>
+<td><code>docking</code></td>
+<td>保存先に付ける実験名</td>
+</tr>
+<tr>
+<td><code>experiment_note</code></td>
+<td>空文字</td>
+<td>実験メモ</td>
+</tr>
+<tr>
+<td><code>log_rate</code></td>
+<td><code>20.0</code></td>
+<td>timeline記録周期［Hz］</td>
+</tr>
+<tr>
+<td><code>flush_interval_sec</code></td>
+<td><code>1.0</code></td>
+<td>書き込みスレッドのflush間隔</td>
+</tr>
+<tr>
+<td><code>stale_timeout_sec</code></td>
+<td><code>1.0</code></td>
+<td>鮮度判定の共通初期値。トピック別に上書き可能</td>
+</tr>
+<tr>
+<td><code>queue_capacity</code></td>
+<td><code>10000</code></td>
+<td>書き込み待ちイベント数の上限</td>
+</tr>
+<tr>
+<td><code>target_marker_id</code></td>
+<td>必須指定</td>
+<td>timelineに採用するVisionマーカーID</td>
+</tr>
+<tr>
+<td><code>optitrack_pose_topic</code></td>
+<td><code>/vrpn_mocap/RigidBody_1/pose</code></td>
+<td>既存ロガーと同じ初期値</td>
+</tr>
+</tbody>
+</table></div>
+<p>他のトピックは3章の値を初期値とする。鮮度判定はログ表示のための設定であり、Controllerのtimeout設定とは独立する。周期・容量は正値、名前は空でないことを検証する。実験名にパス区切りや親ディレクトリ参照を許さない。</p>
+<h3>6.2 起動例</h3>
+<pre><code class="language-bash">ros2 launch docking_bringup docking.launch.py \
+  handoff_x:=0.0 handoff_y:=1.0 handoff_yaw:=0.0 target_marker_id:=7 \
+  enable_logging:=true log_dir:=$HOME/docking_logs experiment_name:=trial_01
+</code></pre>
+<pre><code class="language-bash">ros2 launch docking_logger docking_logger.launch.py \
+  target_marker_id:=7 log_dir:=$HOME/docking_logs experiment_name:=trial_01
+</code></pre>
+<p>数値は例。ロガー単体launchではセンサや制御ノードを起動しない。</p>
+<h3>6.3 記録期間</h3>
+<ul>
+<li>ロガー起動直後から、準備待ちも含めて記録する。</li>
+<li>IDLE、DONE、FAULTになっても終了せず、ロガー終了まで記録する。</li>
+<li>同じプロセス中の制御再スタートは同一フォルダに残す。ControllerOutputのsession_idをそれぞれ保存し、実行を識別する。</li>
+<li>Manager状態にはsession_idがないため、別トピック間の厳密な同時性は保証しない。</li>
+<li>終了時は新規イベント受付を止め、キューを排出してflush・closeする。強制終了時の末尾保存は保証しない。</li>
+<li>ロガー起動順だけでは最初の指令の記録を保証できない。初回指令から必要な実験では <code>auto_start:=false</code> で起動し、保存開始の通知を確認してから既存のstart serviceを呼ぶ。</li>
+</ul>
+<h2>7. 書き込み・通信・異常系</h2>
+<h3>7.1 書き込み</h3>
+<ul>
+<li>購読callbackでは時刻取得、最新値保持、書き込みキューへの投入のみを行う。</li>
+<li>timelineイベントも同じ書き込みスレッドで処理する。共有データの排他制御を行い、行の途中で値が変わらないようにする。</li>
+<li>キュー満杯時は新規イベントを破棄し、破棄数をストリーム別に数える。警告を間引いて表示する。無制限にメモリを増やさない。</li>
+<li>flushは定期実行するが、電源断に対する永続化保証を意味しない。</li>
+</ul>
+<h3>7.2 QoS</h3>
+<ul>
+<li>初版の購読depthは各100とする。</li>
+<li>OptiTrackはbest effort / volatile、その他は現在のpublisherに合わせてreliable / volatileを初期値とする。</li>
+<li>ストリームごとにreliabilityを設定可能とする。外部publisher利用時は互換性を確認する。</li>
+<li>受信連番はロガー内で付ける番号であり、通信途中の全欠落数を示すものではない。</li>
+</ul>
+<h3>7.3 異常時の動作</h3>
+<div class="table-wrap"><table>
+<thead>
+<tr>
+<th>状況</th>
+<th>動作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>保存先作成・初期ファイル作成失敗</td>
+<td>明確なエラーとともにロガー起動失敗</td>
+</tr>
+<tr>
+<td>一部トピック未受信</td>
+<td>他の記録を継続、一覧は空欄・received=false</td>
+</tr>
+<tr>
+<td>センサ値無効・非有限値</td>
+<td>元の値・フラグを保存し、一覧の有効性に反映</td>
+</tr>
+<tr>
+<td>対象マーカー喪失</td>
+<td>最終受信時刻とstaleで識別</td>
+</tr>
+<tr>
+<td>キュー満杯</td>
+<td>新規イベント破棄、警告と件数記録</td>
+</tr>
+<tr>
+<td>ディスク満杯・書き込み例外</td>
+<td>記録失敗を明示し、ロガーを異常終了。可能な範囲でmetadata更新</td>
+</tr>
+<tr>
+<td>ロガー異常終了</td>
+<td>制御ノードは継続。ロガーからロボット停止は行わない</td>
+</tr>
+</tbody>
+</table></div>
+<p>通常の起動ログには保存先を表示する。高頻度データを毎回端末へ出力しない。ロガーの起動成功をドッキング開始条件に追加する機能は初版には含めない。</p>
+<h2>8. 初版の対象外</h2>
+<ul>
+<li>モーターコントローラへのシリアル送信文字列・送信結果、実回転速度。</li>
+<li>カメラ画像・動画、ROS bag、UWB生距離の記録。</li>
+<li>Visionメッセージへの撮影時刻追加。</li>
+<li>厳密なセンサ時刻同期、座標変換、誤差グラフの自動生成。</li>
+<li>他ノードの端末ログの集約、Managerの未公開の状態遷移理由。</li>
+<li>ロガーからの制御操作、動作中の記録開始・停止service。</li>
+</ul>
+<h2>9. 受け入れ条件</h2>
+<ol>
+<li>各対象トピックに既知データを送信すると、個別CSVに値と受信時刻が記録される。</li>
+<li>通常負荷で、受信した短時間の指令変化が個別CSVに残る。</li>
+<li>timelineが設定周期を目標に生成され、各個別CSVのsample_seqに対応する最新値を参照できる。</li>
+<li>UWB・ZED・OptiTrack未接続でも起動・記録でき、未受信と無効値と古い値を区別できる。</li>
+<li>複数のマーカーIDが来ても、timelineは指定IDのみを採用する。</li>
+<li>センサ途絶時にageが増加し、設定閾値を超えるとstaleになる。</li>
+<li>IDLE・DONE・FAULT後も記録を継続し、制御再スタート時のsession_idを保存できる。</li>
+<li>正常終了時にキューを保存し、CSVとmetadataを閉じる。繰り返し起動しても上書きしない。</li>
+<li>キュー超過・書き込み失敗を検出して通知し、ロボットへ指令を送らない。</li>
+<li>bringup起動とロガー単体起動の両方が利用でき、enable_logging=falseでロガーを起動しない。</li>
+<li>metadataに実験条件と提供された設定・上書き値が残り、未知の設定を取得済みとして扱わない。</li>
+<li>実機でログ有効時の制御周期・CPU負荷・キュー破棄数を確認し、実験に必要な周期で継続記録できることを確認する。</li>
+</ol>
+<h2>10. 実装・検証メモ</h2>
+<ul>
+<li>パラメータは起動時に確定し、ロガーの設定を動作中に変更しない。</li>
+<li>QoS深さは <code>qos_depth</code>、ストリーム別設定は <code>&lt;stream&gt;_reliability</code> と <code>&lt;stream&gt;_stale_timeout_sec</code>。
+stream名は個別CSVの拡張子を除いた名前を使う。</li>
+<li>トピック設定は <code>&lt;stream&gt;_topic</code>。OptiTrackのみ <code>optitrack_pose_topic</code>。</li>
+<li>単体起動で外部設定を添付する場合は <code>config_paths_json</code> に「設定名→ファイルパス」のJSONオブジェクト、
+<code>launch_overrides_json</code> に起動時の上書き値のJSONオブジェクトを指定する。</li>
+<li><code>motor_commands.csv</code> の <code>data_json</code> では非有限値を文字列として保存し、有効なJSONを維持する。</li>
+<li>Excelで整数ナノ秒時刻を数値として開くと桁が丸められる場合がある。グラフは <code>elapsed_sec</code> を利用し、
+元のナノ秒整数の全桁を保持して読み込む場合は、その列を文字列に指定する。</li>
+<li>センサ未接続でも全CSVにヘッダーを作成する。既存値を保持するtimelineは同時刻計測を保証しない。</li>
+<li>自動テストで未受信、鮮度、対象ID選択、異常値、終了時排出、キュー超過、書き込み失敗を確認。
+ROSメッセージとタイマーを使った直接callback試験を含む。</li>
+<li>実機の別ノード間通信、長時間の記録負荷、制御周期への影響は実機確認が必要。</li>
+</ul>
+</main></body>
+</html>
