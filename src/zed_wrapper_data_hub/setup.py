@@ -14,7 +14,7 @@ setup(
         ('share/' + package_name, ['package.xml']),
         ('share/' + package_name + '/launch', glob('launch/*.launch.py')),
         ('share/' + package_name + '/config', glob('config/*.yaml')),
-        ('share/' + package_name + '/docs', glob('docs/*.md')),
+        ('share/' + package_name + '/docs', glob('docs/*.md') + glob('docs/*.html')),
     ],
     install_requires=['setuptools'],
     zip_safe=True,
