@@ -565,6 +565,7 @@ error_body_y = cos(current_yaw) * error_world_x - sin(current_yaw) * error_world
         </div>
 
         <h3>P 制御</h3>
+        <p>回転・前後移動・横移動は同じ制御周期で同時に指令する。yaw誤差の大きさによって並進を停止する条件は設けない。</p>
         <pre><code>cmd.linear.x = kp_x * error_body_x
 cmd.linear.y = kp_y * error_body_y
 cmd.angular.z = kp_yaw * yaw_error</code></pre>

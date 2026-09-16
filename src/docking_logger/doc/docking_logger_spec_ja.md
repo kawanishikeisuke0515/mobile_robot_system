@@ -76,7 +76,7 @@ mobile_robot_system/src/docking_logger/
 - `error_world_x/y`：各軸の許容範囲内を0にした世界座標誤差［m］。
 - `error_body_x/y`：世界座標誤差を現在yawで機体座標に変換した、`kp_x/y` を掛ける直前の誤差［m］。現制御の変換は `body_x = -sin(yaw)*world_x + cos(yaw)*world_y`、`body_y = cos(yaw)*world_x + sin(yaw)*world_y`。
 - `yaw_error`：目標yaw − 現在yawを `[-π, π)` に折り返した値［rad］。
-- yawによる並進停止、速度制限、最低速度適用の前の誤差を記録するため、誤差が非ゼロでも指令が0の場合がある。
+- 速度制限、最低速度適用の前の誤差を記録するため、誤差が非ゼロでも指令が0の場合がある。
 - 入力未受信・無効・timeout時もpublishし、`inputs_valid=false`、全誤差・距離を `nan` とする。timelineの `value_valid` はinputs_validと全数値の有限性で判定する。
 - 制御が非activeでも入力が有効なら誤差を記録する。`active` と `session_id` を併記し、動作中かどうかを区別する。
 - header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。

@@ -37,7 +37,6 @@ class PoseControlConfig:
     max_linear_speed: float
     min_angular_speed: float
     max_angular_speed: float
-    yaw_linear_gate: float
 
 
 @dataclass(frozen=True)
@@ -99,13 +98,6 @@ def calculate_pose_command(
         if abs(yaw_error) <= config.yaw_tolerance
         else config.kp_yaw * yaw_error
     )
-    if (
-        config.yaw_linear_gate > 0.0
-        and abs(yaw_error) > config.yaw_linear_gate
-    ):
-        linear_x = 0.0
-        linear_y = 0.0
-
     linear_x = clamp(
         linear_x,
         -config.max_linear_speed,

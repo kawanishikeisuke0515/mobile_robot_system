@@ -17,7 +17,6 @@ def generate_launch_description():
     kp_yaw = LaunchConfiguration('kp_yaw')
     max_linear_speed = LaunchConfiguration('max_linear_speed')
     max_angular_speed = LaunchConfiguration('max_angular_speed')
-    yaw_linear_gate = LaunchConfiguration('yaw_linear_gate')
     mag_topic = LaunchConfiguration('mag_topic')
     raw_x_axis = LaunchConfiguration('raw_x_axis')
     raw_x_sign = LaunchConfiguration('raw_x_sign')
@@ -94,11 +93,6 @@ def generate_launch_description():
             'max_angular_speed',
             default_value='0.5',
             description='Maximum yaw speed command',
-        ),
-        DeclareLaunchArgument(
-            'yaw_linear_gate',
-            default_value='0.35',
-            description='Yaw error above this value suppresses linear commands',
         ),
         DeclareLaunchArgument(
             'mag_topic',
@@ -193,7 +187,6 @@ def generate_launch_description():
                     'kp_yaw': kp_yaw,
                     'max_linear_speed': max_linear_speed,
                     'max_angular_speed': max_angular_speed,
-                    'yaw_linear_gate': yaw_linear_gate,
                 },
             ],
         ),

@@ -149,7 +149,7 @@ li { margin: 5px 0; }
 <li><code>error_world_x/y</code>：各軸の許容範囲内を0にした世界座標誤差［m］。</li>
 <li><code>error_body_x/y</code>：世界座標誤差を現在yawで機体座標に変換した、<code>kp_x/y</code> を掛ける直前の誤差［m］。現制御の変換は <code>body_x = -sin(yaw)*world_x + cos(yaw)*world_y</code>、<code>body_y = cos(yaw)*world_x + sin(yaw)*world_y</code>。</li>
 <li><code>yaw_error</code>：目標yaw − 現在yawを <code>[-π, π)</code> に折り返した値［rad］。</li>
-<li>yawによる並進停止、速度制限、最低速度適用の前の誤差を記録するため、誤差が非ゼロでも指令が0の場合がある。</li>
+<li>速度制限、最低速度適用の前の誤差を記録するため、誤差が非ゼロでも指令が0の場合がある。</li>
 <li>入力未受信・無効・timeout時もpublishし、<code>inputs_valid=false</code>、全誤差・距離を <code>nan</code> とする。timelineの <code>value_valid</code> はinputs_validと全数値の有限性で判定する。</li>
 <li>制御が非activeでも入力が有効なら誤差を記録する。<code>active</code> と <code>session_id</code> を併記し、動作中かどうかを区別する。</li>
 <li>header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。</li>
