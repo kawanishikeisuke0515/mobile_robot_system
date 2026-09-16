@@ -121,8 +121,6 @@ class ModeMachine:
         elif self.state == 'VISION_WAIT':
             if now - self.entered >= self.wait_timeout:
                 self.transition('FAULT', now, 'marker wait timeout')
-            elif uwb and uwb.inputs_valid and not uwb.target_reached:
-                self.transition('UWB_RECOVERY', now, 'handoff pose drifted')
             elif (uwb and uwb.inputs_valid and uwb.target_reached and vision
                   and vision.tracking_valid
                   and vision.target_marker_id == self.target_marker_id

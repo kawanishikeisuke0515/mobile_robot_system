@@ -101,7 +101,7 @@ ArUco検出 → Vision Controller ─ /vision/control_output ──────�
 <p>初期設計では専用の異常状態を設けず、異常時は実行を中止して <code>IDLE</code> に戻す。必要なController出力のタイムアウト、採用する速度指令の非有限値（NaN / Inf）、時刻の巻き戻り、マーカー待機タイムアウトを検知した場合は、ゼロ速度を出力し、両Controllerを無効化する。中止理由はログに残す。自動開始の待機も解除し、原因が解消しても自動再開しない。再開にはstart serviceを必要とし、新しい実行IDで <code>UWB_APPROACH</code> から開始する。start自体は原因の解消を判定せず、異常が残っていれば再度中止する。</p>
 <h3 id="section-4">3.1 引き渡し条件</h3>
 <p>UWB Controllerが、最新かつ有効なUWB位置・ZED姿勢で、目標x/y/yawの許容誤差をすべて満たした場合に <code>target_reached=true</code> とする。Managerは速度ゼロから到達を推測しない。</p>
-<p><code>VISION_WAIT</code> でもUWBの到達状態を再確認する。位置・姿勢が有効で到達条件を外れた場合は <code>UWB_RECOVERY</code> へ戻す。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。</p>
+<p><code>VISION_WAIT</code> でもUWBの到達状態を再確認する。到達条件を外れた場合もゼロ速度で待機を継続する。Vision開始には、その時点でUWBの到達条件を満たしている必要がある。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。</p>
 <h3 id="section-5">3.2 安定検出</h3>
 <p>対象IDの <code>tracking_valid=true</code> が <code>stable_detection_time</code> 以上継続し、その区間で <code>min_detections</code> 以上の新しい検出を確認する。状態の定期publishだけでは検出回数は増えない。</p>
 <p>判定は <code>VISION_WAIT</code> に入ってから開始する。false、通信timeout、検出カウンタの巻き戻りで継続判定をリセットする。<code>tracking_valid</code> は検出timeoutまでの短い欠落を許容するため、「全画像で連続検出」を意味しない。</p>

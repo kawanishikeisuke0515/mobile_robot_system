@@ -58,7 +58,7 @@ IDLE ─ start → UWB_APPROACH ─ 到達 → VISION_WAIT ─ 安定検出 → 
 
 UWB Controllerが、最新かつ有効なUWB位置・ZED姿勢で、目標x/y/yawの許容誤差をすべて満たした場合に `target_reached=true` とする。Managerは速度ゼロから到達を推測しない。
 
-`VISION_WAIT` でもUWBの到達状態を再確認する。位置・姿勢が有効で到達条件を外れた場合は `UWB_RECOVERY` へ戻す。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。
+`VISION_WAIT` でもUWBの到達状態を再確認する。到達条件を外れた場合もゼロ速度で待機を継続する。Vision開始には、その時点でUWBの到達条件を満たしている必要がある。入力が無効なら停止して待機し、古い到達結果ではVisionを開始しない。
 
 ### 3.2 安定検出
 

@@ -116,11 +116,23 @@ def test_output_timeout_latches_fault_and_requires_start():
     assert m.start(0.9)
 
 
-def test_wait_timeout_and_pose_drift():
+def test_pose_drift_keeps_waiting_and_preserves_stable_detection():
     m = waiting()
-    send(m, 'uwb', 0.2, inputs_valid=True, target_reached=False)
-    m.tick(0.2)
-    assert m.state == 'UWB_RECOVERY'
+    session = m.session_id
+    for now, count in ((0.2, 1), (0.35, 2), (0.5, 3)):
+        send(m, 'uwb', now, inputs_valid=True, target_reached=False)
+        send(m, 'vision', now, tracking_valid=True, target_marker_id=0,
+             detection_sequence=count)
+        assert m.tick(now) == ZERO
+        assert m.state == 'VISION_WAIT'
+        assert m.session_id == session
+    assert m.stable_since == 0.2
+    send(m, 'uwb', 0.55, inputs_valid=True, target_reached=True)
+    assert m.tick(0.55) == ZERO
+    assert m.state == 'VISION_DOCKING'
+
+
+def test_wait_timeout():
     m = waiting()
     send(m, 'uwb', 30.2, inputs_valid=True, target_reached=True)
     send(m, 'vision', 30.2)
