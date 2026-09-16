@@ -9,6 +9,7 @@ docking_logger:
     cmd_vel_topic: /rov_cmd_vel
     motor_commands_topic: /rov/motors
     deadman_topic: /deadman
+    uwb_control_error_topic: /uwb/control_error
     uwb_topic: /uwb/position
     zed_heading_topic: /zed/heading
     optitrack_pose_topic: /vrpn_mocap/RigidBody_1/pose

@@ -91,3 +91,31 @@ def test_disk_error_is_not_completed(tmp_path):
 def test_bad_names(tmp_path, name):
     with pytest.raises(ValueError):
         CsvWriter(tmp_path, name, {})
+
+
+def test_control_error_csv_timeline_and_invalid_input(tmp_path):
+    state = samples()
+    fields = dict(session_id='trial', active=False, inputs_valid=True,
+                  raw_error_world_x=3., raw_error_world_y=4., error_world_x=3.,
+                  error_world_y=4., error_body_x=4., error_body_y=3.,
+                  distance_error_m=5., yaw_error=0.)
+    msg = NS(header=NS(stamp=NS(sec=12, nanosec=34), frame_id=''), **fields)
+    row = state.receive('uwb_control_error', decode('uwb_control_error', msg), 100, .1)
+    snapshot = state.snapshot(200, .2)
+    assert snapshot['uwb_control_error_error_body_x'] == 4.
+    assert snapshot['uwb_control_error_value_valid'] is True
+    assert snapshot['uwb_control_error_active'] is False
+    writer = CsvWriter(tmp_path, 'errors', {})
+    writer.submit('uwb_control_error', row)
+    writer.submit('timeline', snapshot)
+    writer.close()
+    with (writer.path / 'uwb_control_error.csv').open() as file:
+        saved = next(csv.DictReader(file))
+    assert saved['distance_error_m'] == '5.0'
+    assert saved['source_stamp_ns'] == '12000000034'
+    msg.inputs_valid = False
+    for field in FIELDS['uwb_control_error'][3:]:
+        setattr(msg, field, float('nan'))
+    state.receive('uwb_control_error', decode('uwb_control_error', msg), 300, .3)
+    assert state.snapshot(400, .4)['uwb_control_error_value_valid'] is False
+    assert state.snapshot(500, 2.)['uwb_control_error_stale'] is True

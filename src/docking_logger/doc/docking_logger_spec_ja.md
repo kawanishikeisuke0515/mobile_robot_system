@@ -4,7 +4,7 @@
 
 `docking_bringup` 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。
 
-本書は初版の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
+本書はスキーマバージョン2の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
 
 ## 2. 配置と責務
 
@@ -25,7 +25,7 @@ mobile_robot_system/src/docking_logger/
 - ノード名・実行ファイル名は `docking_logger`。
 - `docking_bringup` は起動の取りまとめ、ロガーは購読・保存を担当する。
 - ロガー単体で起動し、既に動作しているシステムの記録を途中から開始できる。
-- 既存のセンサ・制御・モータードライバの処理は変更しない。
+- 既存の制御計算・モータードライバの処理は変更しない。UWB制御ノードには誤差のpublishを追加する。
 - 速度指令のpublishや開始・停止serviceの呼び出しを行わない。
 - ファイル書き込みはロガー内の専用スレッドで処理する。
 
@@ -39,6 +39,7 @@ mobile_robot_system/src/docking_logger/
 | モーター指令 | `/rov/motors` | `std_msgs/msg/Float32MultiArray` | 4要素の指令値、受信要素数 |
 | 駆動許可 | `/deadman` | `std_msgs/msg/Bool` | data |
 | UWB位置 | `/uwb/position` | `uwb_interfaces/msg/UwbPosition` | x_m、y_m、valid、device_time_ms、header |
+| UWB制御誤差 | `/uwb/control_error` | `uwb_interfaces/msg/UwbControlError` | 制御計算で使用した位置・姿勢誤差、距離、session_id、active、inputs_valid、header |
 | ZED heading | `/zed/heading` | `zed_interfaces/msg/ZedHeading` | raw_x/z、corrected_x/z、magnetic_heading_deg、robot_yaw_deg/rad、valid、header |
 | OptiTrack | `/vrpn_mocap/RigidBody_1/pose` | `geometry_msgs/msg/PoseStamped` | position x/y/z、quaternion x/y/z/w、header |
 | Vision | `/aruco/distance` | `aruco_interfaces/msg/ArucoDistance` | id、x/y/z、distance、theta、yaw、center_u/v、normalized_center_error |
@@ -67,6 +68,22 @@ mobile_robot_system/src/docking_logger/
 - 別IDの受信では対象マーカーの鮮度を更新しない。
 - 対象マーカーが見えなくなった場合は最終値の経過時間で判定する。ゼロ位置に置き換えない。
 
+### 3.3 UWBのP制御誤差
+
+- Controllerの同じ制御計算結果を専用トピックに毎制御周期publishし、ロガーは再計算せず保存する。単体・managed両モードで利用できる。
+- `raw_error_world_x/y`：目標位置 − UWB位置［m］。許容範囲を適用する前の符号付き誤差。
+- `distance_error_m`：上記2成分のノルム（目標までの平面距離［m］）。
+- `error_world_x/y`：各軸の許容範囲内を0にした世界座標誤差［m］。
+- `error_body_x/y`：世界座標誤差を現在yawで機体座標に変換した、`kp_x/y` を掛ける直前の誤差［m］。現制御の変換は `body_x = -sin(yaw)*world_x + cos(yaw)*world_y`、`body_y = cos(yaw)*world_x + sin(yaw)*world_y`。
+- `yaw_error`：目標yaw − 現在yawを `[-π, π)` に折り返した値［rad］。
+- yawによる並進停止、速度制限、最低速度適用の前の誤差を記録するため、誤差が非ゼロでも指令が0の場合がある。
+- 入力未受信・無効・timeout時もpublishし、`inputs_valid=false`、全誤差・距離を `nan` とする。timelineの `value_valid` はinputs_validと全数値の有限性で判定する。
+- 制御が非activeでも入力が有効なら誤差を記録する。`active` と `session_id` を併記し、動作中かどうかを区別する。
+- header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。
+- Controller側のトピックパラメータは `control_error_topic`、ロガー側は `uwb_control_error_topic`。両方の初期値は `/uwb/control_error`。
+- 追加CSVは `uwb_control_error.csv`。timelineでは `uwb_control_error_` 接頭辞で全列と鮮度を保存する。metadataの `schema_version` は2。
+- 利用前に `uwb_interfaces`、UWB Controller、`docking_logger` を再ビルドし、同じ新しいinterface環境をsourceする。
+
 ## 4. 保存形式
 
 ```text
@@ -76,6 +93,7 @@ mobile_robot_system/src/docking_logger/
 ├── motor_commands.csv
 ├── deadman.csv
 ├── uwb.csv
+├── uwb_control_error.csv
 ├── zed_heading.csv
 ├── optitrack.csv
 ├── vision.csv
@@ -143,7 +161,7 @@ bringup起動時は設定ファイルと上書き値をロガーへ渡す。単�
 - UWBはアンカー定義に基づくx/y［m］、ZED headingは設定されたyaw基準を維持する。
 - OptiTrackは元のposition［m］とquaternion、frame_idを保存する。
 - Visionはカメラから見たマーカーの相対位置［m］。OpenCVの右x・下y・前zであり、ロボットの世界座標位置ではない。theta/yawは現実装のradを保存する。
-- UWB・OptiTrack・Vision間の座標合わせや、センサ取り付け位置の補正、位置誤差の算出は後処理で行う。変換未設定の座標を直接差し引かない。
+- UWB・OptiTrack・Vision間の座標合わせや、センサ取り付け位置の補正、センサ間の位置誤差の算出は後処理で行う。変換未設定の座標を直接差し引かない。
 
 ## 6. 起動・終了とパラメータ
 
@@ -240,7 +258,8 @@ ros2 launch docking_logger docking_logger.launch.py \
 9. キュー超過・書き込み失敗を検出して通知し、ロボットへ指令を送らない。
 10. bringup起動とロガー単体起動の両方が利用でき、enable_logging=falseでロガーを起動しない。
 11. metadataに実験条件と提供された設定・上書き値が残り、未知の設定を取得済みとして扱わない。
-12. 実機でログ有効時の制御周期・CPU負荷・キュー破棄数を確認し、実験に必要な周期で継続記録できることを確認する。
+12. UWBのP制御に使用した機体座標誤差と目標までの距離が個別CSV・timelineに残り、入力無効時はnanとinputs_valid=falseで識別できる。
+13. 実機でログ有効時の制御周期・CPU負荷・キュー破棄数を確認し、実験に必要な周期で継続記録できることを確認する。
 
 
 ## 10. 実装・検証メモ

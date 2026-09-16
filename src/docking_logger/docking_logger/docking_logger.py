@@ -11,7 +11,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rcl_interfaces.msg import ParameterDescriptor
 from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Bool, Float32MultiArray, String
-from uwb_interfaces.msg import UwbPosition
+from uwb_interfaces.msg import UwbPosition, UwbControlError
 from zed_interfaces.msg import ZedHeading
 from aruco_interfaces.msg import ArucoDistance
 from mode_manager_interfaces.msg import ControllerOutput
@@ -22,6 +22,7 @@ STREAMS = {
     'cmd_vel': (Twist, '/rov_cmd_vel'),
     'motor_commands': (Float32MultiArray, '/rov/motors'),
     'deadman': (Bool, '/deadman'),
+    'uwb_control_error': (UwbControlError, '/uwb/control_error'),
     'uwb': (UwbPosition, '/uwb/position'),
     'zed_heading': (ZedHeading, '/zed/heading'),
     'optitrack': (PoseStamped, '/vrpn_mocap/RigidBody_1/pose'),
@@ -112,6 +113,8 @@ class DockingLogger(Node):
             'time': {'receive': 'ROS clock nanoseconds', 'elapsed': 'monotonic seconds',
                      'source': 'original message stamp, blank when absent'},
             'coordinates': {'uwb': 'anchor-defined x/y [m]',
+                            'uwb_control_error': 'controller world/body errors [m], yaw [rad]; '
+                                                 'distance is raw world error norm',
                             'zed_heading': 'configured robot yaw [rad/deg]',
                             'optitrack': 'original frame position [m], quaternion xyzw',
                             'vision': 'marker relative to camera: right x, down y, forward z [m]; angles [rad]',

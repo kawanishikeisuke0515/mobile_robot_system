@@ -8,6 +8,7 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/UwbDistances.msg"
   "msg/UwbPosition.msg"
+  "msg/UwbControlError.msg"
   DEPENDENCIES std_msgs
 )
 

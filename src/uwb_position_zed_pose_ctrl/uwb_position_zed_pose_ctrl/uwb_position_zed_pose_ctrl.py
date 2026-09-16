@@ -1,3 +1,4 @@
+import math
 import os
 from typing import Optional
 
@@ -6,7 +7,7 @@ from geometry_msgs.msg import Twist
 from mode_manager.controller_link import ControllerLink
 from rclpy.node import Node
 from rclpy.time import Time
-from uwb_interfaces.msg import UwbPosition
+from uwb_interfaces.msg import UwbPosition, UwbControlError
 from zed_interfaces.msg import ZedHeading
 
 from .pose_control import PoseControlConfig
@@ -71,6 +72,9 @@ class UwbPositionZedPoseController(Node):
         self.was_target_reached = False
 
         self.link = ControllerLink(self, 'uwb', self._reset_control)
+        self.declare_parameter('control_error_topic', '/uwb/control_error')
+        self.error_publisher = self.create_publisher(
+            UwbControlError, str(self.get_parameter('control_error_topic').value), 10)
         self.cmd_publisher = None
         if not self.link.managed:
             self.cmd_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
@@ -203,6 +207,7 @@ class UwbPositionZedPoseController(Node):
                 self.get_logger().warn('UWB position or ZED heading unavailable; stopping robot')
             self.was_waiting_for_inputs = True
             self.was_target_reached = False
+            self._publish_error(None, active)
             self.link.publish(cmd, inputs_valid=False)
             return
 
@@ -213,6 +218,7 @@ class UwbPositionZedPoseController(Node):
             current_yaw=float(self.latest_heading.robot_yaw_rad),
             config=self.config,
         )
+        self._publish_error(result.debug, active)
         cmd.linear.x = result.linear_x
         cmd.linear.y = result.linear_y
         cmd.angular.z = result.angular_z
@@ -224,6 +230,19 @@ class UwbPositionZedPoseController(Node):
             cmd = Twist()
         self.link.publish(cmd, inputs_valid=True,
                           target_reached=result.debug.target_reached)
+
+    def _publish_error(self, debug, active):
+        msg = UwbControlError()
+        msg.header.stamp = self.get_clock().now().to_msg()
+        msg.session_id = self.link.session_id
+        msg.active = active
+        msg.inputs_valid = debug is not None
+        for field in ('raw_error_world_x', 'raw_error_world_y', 'error_world_x',
+                      'error_world_y', 'error_body_x', 'error_body_y', 'yaw_error'):
+            setattr(msg, field, getattr(debug, field) if debug is not None else float('nan'))
+        msg.distance_error_m = math.hypot(debug.raw_error_world_x, debug.raw_error_world_y) \
+            if debug is not None else float('nan')
+        self.error_publisher.publish(msg)
 
     def _has_valid_inputs(self) -> bool:
         if (

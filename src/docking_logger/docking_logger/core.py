@@ -20,6 +20,9 @@ FIELDS = {
     'motor_commands': ['motor_0', 'motor_1', 'motor_2', 'motor_3', 'element_count',
                        'shape_valid', 'data_json'],
     'deadman': ['data'],
+    'uwb_control_error': ['session_id', 'active', 'inputs_valid', 'raw_error_world_x',
+                          'raw_error_world_y', 'error_world_x', 'error_world_y',
+                          'error_body_x', 'error_body_y', 'distance_error_m', 'yaw_error'],
     'uwb': ['x_m', 'y_m', 'valid', 'device_time_ms'],
     'zed_heading': ['raw_x', 'raw_z', 'corrected_x', 'corrected_z',
                     'magnetic_heading_deg', 'robot_yaw_deg', 'robot_yaw_rad', 'valid'],
@@ -76,6 +79,7 @@ def decode(key, msg):
 def valid_value(key, row):
     fields = {
         'cmd_vel': TWIST, 'motor_commands': [f'motor_{i}' for i in range(4)],
+        'uwb_control_error': FIELDS['uwb_control_error'][3:],
         'uwb': ['x_m', 'y_m'], 'zed_heading': ['robot_yaw_rad', 'robot_yaw_deg'],
         'optitrack': FIELDS['optitrack'], 'vision': ['x', 'y', 'z', 'distance', 'theta', 'yaw'],
     }.get(key)
@@ -84,6 +88,8 @@ def valid_value(key, row):
     if key == 'motor_commands' and not row['shape_valid']:
         return False
     finite = all(isinstance(row[f], (int, float)) and math.isfinite(row[f]) for f in fields)
+    if key == 'uwb_control_error':
+        finite = finite and row['inputs_valid']
     if key in ('uwb', 'zed_heading'):
         finite = finite and row['valid']
     if key == 'optitrack':
@@ -138,7 +144,7 @@ class CsvWriter:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
         self.path = Path(log_dir).expanduser().resolve() / f'{timestamp}_{name}_{self.record_id[:8]}'
         self.path.mkdir(parents=True, exist_ok=False)
-        self.metadata = dict(metadata, schema_version=1, record_id=self.record_id,
+        self.metadata = dict(metadata, schema_version=2, record_id=self.record_id,
                              started_at=utc_now(), status='recording', output_dir=str(self.path))
         self.queue = queue.Queue(maxsize=capacity)
         self.flush_interval = flush_interval
