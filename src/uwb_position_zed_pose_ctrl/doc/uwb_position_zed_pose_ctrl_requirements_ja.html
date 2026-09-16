@@ -501,8 +501,8 @@
               <tr><td><code>target_x</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite</td><td>目標 x 位置 [m]</td></tr>
               <tr><td><code>target_y</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite</td><td>目標 y 位置 [m]</td></tr>
               <tr><td><code>target_yaw</code></td><td><code>float</code></td><td><code>0.0</code></td><td>finite rad</td><td>目標 yaw [rad]</td></tr>
-              <tr><td><code>x_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>x 方向の停止許容誤差 [m]</td></tr>
-              <tr><td><code>y_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>y 方向の停止許容誤差 [m]</td></tr>
+              <tr><td><code>x_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>機体前後方向の停止許容誤差 [m]</td></tr>
+              <tr><td><code>y_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>機体横方向の停止許容誤差 [m]</td></tr>
               <tr><td><code>yaw_tolerance</code></td><td><code>float</code></td><td><code>0.05</code></td><td><code>&gt;= 0.0</code></td><td>yaw の停止許容誤差 [rad]</td></tr>
               <tr><td><code>kp_x</code></td><td><code>float</code></td><td><code>0.4</code></td><td><code>&gt;= 0.0</code></td><td>x 方向 P ゲイン</td></tr>
               <tr><td><code>kp_y</code></td><td><code>float</code></td><td><code>0.4</code></td><td><code>&gt;= 0.0</code></td><td>y 方向 P ゲイン</td></tr>
@@ -525,8 +525,8 @@
               <tr><th>ID</th><th>Requirement</th></tr>
             </thead>
             <tbody>
-              <tr><td>MR-001</td><td><code>abs(target_x - current_x) &lt;= x_tolerance</code> の場合、x 方向の速度指令を <code>0.0</code> とすること。</td></tr>
-              <tr><td>MR-002</td><td><code>abs(target_y - current_y) &lt;= y_tolerance</code> の場合、y 方向の速度指令を <code>0.0</code> とすること。</td></tr>
+              <tr><td>MR-001</td><td><code>abs(error_body_x) &lt;= x_tolerance</code> の場合、x 方向の速度指令を <code>0.0</code> とすること。</td></tr>
+              <tr><td>MR-002</td><td><code>abs(error_body_y) &lt;= y_tolerance</code> の場合、y 方向の速度指令を <code>0.0</code> とすること。</td></tr>
               <tr><td>MR-003</td><td><code>abs(wrap_pi(target_yaw - current_yaw)) &lt;= yaw_tolerance</code> の場合、yaw 角速度指令を <code>0.0</code> とすること。</td></tr>
               <tr><td>MR-004</td><td><code>x_tolerance</code>, <code>y_tolerance</code>, <code>yaw_tolerance</code> は実機の UWB / heading ノイズより小さすぎない値に調整できること。</td></tr>
               <tr><td>MR-005</td><td>目標 pose 到達判定は、位置と yaw の全 tolerance を同時に満たした場合のみ true とすること。</td></tr>
@@ -555,25 +555,25 @@
 raw_error_world_y = target_y - current_y
 yaw_error = wrap_pi(target_yaw - current_yaw)
 
-error_world_x = 0.0 if abs(raw_error_world_x) &lt;= x_tolerance else raw_error_world_x
-error_world_y = 0.0 if abs(raw_error_world_y) &lt;= y_tolerance else raw_error_world_y
+error_world_x = raw_error_world_x
+error_world_y = raw_error_world_y
 
-error_body_x = sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
-error_body_y = cos(current_yaw) * error_world_x - sin(current_yaw) * error_world_y</code></pre>
+error_body_x = -sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
+error_body_y = cos(current_yaw) * error_world_x + sin(current_yaw) * error_world_y</code></pre>
         <div class="callout warn">
           <code>error_body_x</code> はロボット前方を正とする。<code>error_body_y</code> は <code>robot_yaw_rad == 0.0</code> のとき UWB/world 座標系の <code>+x</code> 方向を正とする。
         </div>
 
         <h3>P 制御</h3>
         <p>回転・前後移動・横移動は同じ制御周期で同時に指令する。yaw誤差の大きさによって並進を停止する条件は設けない。</p>
-        <pre><code>cmd.linear.x = kp_x * error_body_x
-cmd.linear.y = kp_y * error_body_y
+        <pre><code>cmd.linear.x = 0.0 if abs(error_body_x) &lt;= x_tolerance else kp_x * error_body_x
+cmd.linear.y = 0.0 if abs(error_body_y) &lt;= y_tolerance else kp_y * error_body_y
 cmd.angular.z = kp_yaw * yaw_error</code></pre>
         <p>
           yaw 制御では、<code>yaw_error &gt; 0.0</code> の場合に反時計回り、<code>yaw_error &lt; 0.0</code> の場合に時計回りへ回転する。
         </p>
         <p>
-          tolerance 内の world 座標系誤差は個別に <code>0.0</code> としてから、body 座標系へ変換する。
+          world 座標系誤差をそのまま body 座標系へ変換し、各機体軸の誤差が tolerance 内なら対応する速度指令を <code>0.0</code> とする。到達判定も両機体軸と yaw の tolerance を使用する。
           yaw が <code>yaw_tolerance</code> 内の場合は <code>cmd.angular.z = 0.0</code> とする。
         </p>
 
@@ -593,8 +593,8 @@ cmd.angular.z = clamp(cmd.angular.z, -max_angular_speed, max_angular_speed)</cod
         <h3>TRACKING 到達条件</h3>
         <pre><code>recent_position == true
 recent_heading == true
-abs(target_x - current_x) &lt;= x_tolerance
-abs(target_y - current_y) &lt;= y_tolerance
+abs(error_body_x) &lt;= x_tolerance
+abs(error_body_y) &lt;= y_tolerance
 abs(wrap_pi(target_yaw - current_yaw)) &lt;= yaw_tolerance</code></pre>
         <div class="table-wrap">
           <table>

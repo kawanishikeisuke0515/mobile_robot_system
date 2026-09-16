@@ -149,3 +149,49 @@ def test_large_yaw_error_allows_simultaneous_forward_lateral_and_rotation(target
     assert result.linear_x == 1.0
     assert result.linear_y == -2.0
     assert result.angular_z == pytest.approx(wrap_pi(target_yaw))
+
+
+@pytest.mark.parametrize('axis', ['x', 'y'])
+def test_body_axis_tolerance_stops_at_boundary_before_min_speed(axis):
+    # At yaw=0, world Y maps to body X and world X maps to body Y.
+    config = default_config(
+        target_y=0.05 if axis == 'x' else 0.2,
+        target_x=0.05 if axis == 'y' else 0.2,
+        min_linear_speed=0.25,
+    )
+    result = calculate_pose_command(0.0, 0.0, 0.0, config)
+    assert getattr(result, 'linear_' + axis) == 0.0
+    assert getattr(result, 'linear_' + ('y' if axis == 'x' else 'x')) == 0.25
+    assert not result.debug.target_reached
+
+
+def test_world_tolerance_does_not_discard_error_before_rotation():
+    result = calculate_pose_command(0.0, 0.0, math.pi / 4, default_config(
+        target_x=0.04, target_y=0.04, target_yaw=math.pi / 4,
+        min_linear_speed=0.25,
+    ))
+    assert result.linear_x == 0.0
+    assert result.linear_y == 0.25
+    assert not result.debug.target_reached
+    assert result.debug.error_world_x == 0.04
+    assert result.debug.error_world_y == 0.04
+
+
+def test_body_tolerances_define_arrival_with_independent_axis_limits():
+    result = calculate_pose_command(0.0, 0.0, 0.0, default_config(
+        target_x=0.08, target_y=0.02, x_tolerance=0.03, y_tolerance=0.1,
+        min_linear_speed=0.25,
+    ))
+    assert result.debug.target_reached
+    assert result.linear_x == 0.0
+    assert result.linear_y == 0.0
+    assert result.angular_z == 0.0
+
+
+def test_rotation_residual_does_not_restart_translation_inside_body_tolerances():
+    result = calculate_pose_command(0.0, 0.0, 0.0, default_config(
+        target_x=0.02, target_y=0.03, target_yaw=0.2, min_linear_speed=0.25,
+    ))
+    assert not result.debug.target_reached
+    assert result.linear_x == result.linear_y == 0.0
+    assert result.angular_z > 0.0

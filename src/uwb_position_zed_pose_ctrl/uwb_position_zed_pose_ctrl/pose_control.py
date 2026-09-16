@@ -69,30 +69,23 @@ def calculate_pose_command(
     raw_error_world_y = config.target_y - current_y
     yaw_error = wrap_pi(config.target_yaw - current_yaw)
 
-    target_reached = (
-        abs(raw_error_world_x) <= config.x_tolerance
-        and abs(raw_error_world_y) <= config.y_tolerance
-        and abs(yaw_error) <= config.yaw_tolerance
-    )
-
-    error_world_x = (
-        0.0
-        if abs(raw_error_world_x) <= config.x_tolerance
-        else raw_error_world_x
-    )
-    error_world_y = (
-        0.0
-        if abs(raw_error_world_y) <= config.y_tolerance
-        else raw_error_world_y
-    )
+    # Preserve world errors; apply axis tolerances only after body conversion.
+    error_world_x = raw_error_world_x
+    error_world_y = raw_error_world_y
 
     cos_yaw = math.cos(current_yaw)
     sin_yaw = math.sin(current_yaw)
     error_body_x = -sin_yaw * error_world_x + cos_yaw * error_world_y
     error_body_y = cos_yaw * error_world_x + sin_yaw * error_world_y
 
-    linear_x = config.kp_x * error_body_x
-    linear_y = config.kp_y * error_body_y
+    x_reached = abs(error_body_x) <= config.x_tolerance
+    y_reached = abs(error_body_y) <= config.y_tolerance
+    target_reached = (
+        x_reached and y_reached and abs(yaw_error) <= config.yaw_tolerance
+    )
+
+    linear_x = 0.0 if x_reached else config.kp_x * error_body_x
+    linear_y = 0.0 if y_reached else config.kp_y * error_body_y
     angular_z = (
         0.0
         if abs(yaw_error) <= config.yaw_tolerance

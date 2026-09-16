@@ -87,8 +87,8 @@ parameter は launch 引数または YAML から変更できること。未指�
 | `target_x` | `float` | `0.0` | finite | 目標 x 位置 [m] |
 | `target_y` | `float` | `0.0` | finite | 目標 y 位置 [m] |
 | `target_yaw` | `float` | `0.0` | finite rad | 目標 yaw [rad] |
-| `x_tolerance` | `float` | `0.05` | `>= 0.0` | x 方向の停止許容誤差 [m] |
-| `y_tolerance` | `float` | `0.05` | `>= 0.0` | y 方向の停止許容誤差 [m] |
+| `x_tolerance` | `float` | `0.05` | `>= 0.0` | 機体前後方向の停止許容誤差 [m] |
+| `y_tolerance` | `float` | `0.05` | `>= 0.0` | 機体横方向の停止許容誤差 [m] |
 | `yaw_tolerance` | `float` | `0.05` | `>= 0.0` | yaw の停止許容誤差 [rad] |
 | `kp_x` | `float` | `0.4` | `>= 0.0` | x 方向 P ゲイン |
 | `kp_y` | `float` | `0.4` | `>= 0.0` | y 方向 P ゲイン |
@@ -105,8 +105,8 @@ parameter は launch 引数または YAML から変更できること。未指�
 
 | ID | Requirement |
 | --- | --- |
-| MR-001 | `abs(target_x - current_x) <= x_tolerance` の場合、x 方向の速度指令を `0.0` とすること。 |
-| MR-002 | `abs(target_y - current_y) <= y_tolerance` の場合、y 方向の速度指令を `0.0` とすること。 |
+| MR-001 | `abs(error_body_x) <= x_tolerance` の場合、x 方向の速度指令を `0.0` とすること。 |
+| MR-002 | `abs(error_body_y) <= y_tolerance` の場合、y 方向の速度指令を `0.0` とすること。 |
 | MR-003 | `abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance` の場合、yaw 角速度指令を `0.0` とすること。 |
 | MR-004 | `x_tolerance`, `y_tolerance`, `yaw_tolerance` は実機の UWB / heading ノイズより小さすぎない値に調整できること。 |
 | MR-005 | 目標 pose 到達判定は、位置と yaw の全 tolerance を同時に満たした場合のみ true とすること。 |
@@ -126,8 +126,8 @@ raw_error_world_x = target_x - current_x
 raw_error_world_y = target_y - current_y
 yaw_error = wrap_pi(target_yaw - current_yaw)
 
-error_world_x = 0.0 if abs(raw_error_world_x) <= x_tolerance else raw_error_world_x
-error_world_y = 0.0 if abs(raw_error_world_y) <= y_tolerance else raw_error_world_y
+error_world_x = raw_error_world_x
+error_world_y = raw_error_world_y
 
 error_body_x = -sin(current_yaw) * error_world_x + cos(current_yaw) * error_world_y
 error_body_y = cos(current_yaw) * error_world_x + sin(current_yaw) * error_world_y
@@ -140,8 +140,8 @@ error_body_y = cos(current_yaw) * error_world_x + sin(current_yaw) * error_world
 位置と yaw は独立した P 制御とする。
 
 ```text
-cmd.linear.x = kp_x * error_body_x
-cmd.linear.y = kp_y * error_body_y
+cmd.linear.x = 0.0 if abs(error_body_x) <= x_tolerance else kp_x * error_body_x
+cmd.linear.y = 0.0 if abs(error_body_y) <= y_tolerance else kp_y * error_body_y
 cmd.angular.z = kp_yaw * yaw_error
 ```
 
@@ -149,20 +149,20 @@ yaw 制御では、`yaw_error > 0.0` の場合に反時計回り、`yaw_error < 
 
 回転・前後移動・横移動は同じ制御周期で同時に指令する。yaw誤差の大きさによって並進を停止する条件は設けない。
 
-tolerance 内の world 座標系誤差は個別に `0.0` としてから、body 座標系へ変換する。
+world 座標系誤差をそのまま body 座標系へ変換し、各機体軸の誤差が tolerance 内なら対応する速度指令を `0.0` とする。
 
 ```text
-if abs(error_world_x) <= x_tolerance:
-    error_world_x = 0.0
+if abs(error_body_x) <= x_tolerance:
+    cmd.linear.x = 0.0
 
-if abs(error_world_y) <= y_tolerance:
-    error_world_y = 0.0
+if abs(error_body_y) <= y_tolerance:
+    cmd.linear.y = 0.0
 
 if abs(yaw_error) <= yaw_tolerance:
     cmd.angular.z = 0.0
 ```
 
-位置到達判定と tolerance 適用は world 座標系の `x/y` 誤差を使用し、速度指令生成は tolerance 適用後に body 座標系へ変換した誤差を使用する。
+位置到達判定と速度の停止判定は body 座標系の `x/y` 誤差を使用する。旋回すると許容範囲の向きも変わる。診断用の world / body 誤差は tolerance 適用前の値を保持する。
 
 ### 7.3 速度制限
 
@@ -211,8 +211,8 @@ current_yaw = latest_zed_heading.robot_yaw_rad
 ```text
 recent_position == true
 recent_heading == true
-abs(target_x - current_x) <= x_tolerance
-abs(target_y - current_y) <= y_tolerance
+abs(error_body_x) <= x_tolerance
+abs(error_body_y) <= y_tolerance
 abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 ```
 
