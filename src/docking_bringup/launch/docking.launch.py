@@ -25,6 +25,7 @@ def generate_launch_description():
     configs = {
         'uwb_distance_config': ('uwb_position_publisher', 'uwb_distance_publisher.yaml'),
         'uwb_position_config': ('uwb_position_publisher', 'uwb_position_publisher.yaml'),
+        'robot_pose_config': ('uwb_robot_pose_publisher', 'uwb_robot_pose_publisher.yaml'),
         'heading_config': ('zed_heading_publisher', 'zed_heading_publisher.yaml'),
         'zed_config': ('zed_wrapper_data_hub', 'zed2i_data_hub.yaml'),
         'manager_config': ('mode_manager', 'mode_manager.yaml'),
@@ -67,7 +68,7 @@ def generate_launch_description():
     managed_args = {name: LaunchConfiguration(name) for name in (
         'handoff_x', 'handoff_y', 'handoff_yaw', 'target_marker_id',
         'vision_target_z', 'docking_distance', 'manager_config', 'auto_start',
-        'uwb_controller_config', 'vision_config', 'aruco_config')}
+        'uwb_controller_config', 'robot_pose_config', 'vision_config', 'aruco_config')}
     def start_logger(context):
         def value(name):
             return LaunchConfiguration(name).perform(context)

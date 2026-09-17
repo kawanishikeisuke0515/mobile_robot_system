@@ -171,6 +171,17 @@ def generate_launch_description():
                 },
             ],
         ),
+        DeclareLaunchArgument(
+            'robot_pose_config',
+            default_value=PathJoinSubstitution([
+                FindPackageShare('uwb_robot_pose_publisher'), 'config',
+                'uwb_robot_pose_publisher.yaml']),
+        ),
+        Node(
+            package='uwb_robot_pose_publisher', executable='uwb_robot_pose_publisher',
+            name='uwb_robot_pose_publisher', output='screen',
+            parameters=[LaunchConfiguration('robot_pose_config')],
+        ),
         Node(
             package='uwb_position_zed_pose_ctrl',
             executable='uwb_position_zed_pose_ctrl',

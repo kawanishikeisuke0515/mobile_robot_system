@@ -120,3 +120,7 @@ ros2 launch docking_logger docking_logger.launch.py \
 ```
 
 詳細は [Docking Logger仕様書](../../docking_logger/doc/docking_logger_spec_ja.md) を参照。
+
+## ロボット中心姿勢の制御入力
+
+UWB位置とheadingは `uwb_robot_pose_publisher` で中心姿勢 `/uwb/robot_pose` に変換し、UWB制御へ渡す。目標x/yはロボット中心の座標で、`handoff_yaw=0` は従来どおりWorldの+Y方向。`robot_pose_config` で中心補正ノードのYAMLを指定する。managed-only launchも中心補正ノードを起動するため、外部で同名ノードを重複起動しない。

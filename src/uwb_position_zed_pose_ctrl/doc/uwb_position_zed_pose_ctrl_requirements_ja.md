@@ -1,7 +1,7 @@
 # UWB + ZED Pose Controller 要求仕様書
 
-Version: 0.1 draft
-Date: 2026-08-25
+Version: 0.2 draft
+Date: 2026-09-16
 Status: draft
 
 ## 1. 目的
@@ -29,8 +29,8 @@ Status: draft
 
 本要求で整理する目的は、以下を満たすことである。
 
-1. `/uwb/position` から現在位置 `x_m`, `y_m` を取得する。
-2. `/zed/heading` から現在 yaw `robot_yaw_rad` を取得する。
+1. `/uwb/robot_pose` からロボット中心のWorld位置を取得する。
+2. 同じPoseStampedのQuaternionからWorld yawを求め、π/2を引いて既存のheading基準へ変換する。
 3. `target_x`, `target_y`, `target_yaw` で定義された目標 pose へ到達する。
 4. 位置誤差と yaw 誤差に対して P 制御を行う。
 5. 目標位置と目標 yaw には、それぞれ許容マージンを設定できる。
@@ -41,23 +41,15 @@ Status: draft
 
 | Topic | Type | 用途 |
 | --- | --- | --- |
-| `/uwb/position` | `uwb_interfaces/msg/UwbPosition` | UWB によるロボット 2D 位置を受け取る |
-| `/zed/heading` | `zed_interfaces/msg/ZedHeading` | ZED2i によるロボット yaw を受け取る |
+| `/uwb/robot_pose` | `geometry_msgs/msg/PoseStamped` | 補正済みロボット中心のWorld位置・姿勢 |
 
-### 4.1 `/uwb/position` 使用フィールド
+`pose.position.x/y` を中心位置として使用する。Quaternionから求めたWorld yawを `wrap_pi(world_yaw - π/2)` で既存の制御yawへ変換する。`target_yaw` と `handoff_yaw` は従来どおり0でWorldの+Yを向く。横方向の速度指令の符号・制御式は維持する。
 
-| Field | Type | 用途 |
-| --- | --- | --- |
-| `x_m` | `float32` | ロボット現在位置 x [m] |
-| `y_m` | `float32` | ロボット現在位置 y [m] |
-| `valid` | `bool` | UWB 位置推定が有効か判定する |
+`header.frame_id` は `world_frame_id` と一致する必要がある。位置・Quaternionは有限値、Quaternionのノルムは1との差が0.001以内であることを要求し、正規化してyawを算出する。
 
-### 4.2 `/zed/heading` 使用フィールド
+鮮度は `header.stamp` と現在のROS時刻で判定する。古い値・未来時刻・不正frame・不正Quaternionは入力を無効化する。重複・逆順stampは破棄し、受信で鮮度を更新しない。ROS時刻の後退時は保持姿勢とstampをクリアする。制御セッション変更時も保持姿勢を破棄し、新しいstampの姿勢を待つ。
 
-| Field | Type | 用途 |
-| --- | --- | --- |
-| `robot_yaw_rad` | `float32` | ロボット現在 yaw [rad] |
-| `valid` | `bool` | heading が有効か判定する |
+`uwb_position_publisher` と `zed_heading_publisher` は上流の `uwb_robot_pose_publisher` に接続する。本コントローラは元の2つのtopicを直接購読しない。
 
 ## 5. Publish Topic
 
@@ -81,8 +73,8 @@ parameter は launch 引数または YAML から変更できること。未指�
 
 | Parameter | Type | Default | Range / Constraint | 用途 |
 | --- | --- | --- | --- | --- |
-| `uwb_position_topic` | `string` | `/uwb/position` | non-empty | subscribe する UWB 位置 topic |
-| `zed_heading_topic` | `string` | `/zed/heading` | non-empty | subscribe する ZED heading topic |
+| `robot_pose_topic` | `string` | `/uwb/robot_pose` | non-empty | 補正済み姿勢topic |
+| `world_frame_id` | `string` | `world` | non-empty | 受信姿勢の座標系 |
 | `cmd_vel_topic` | `string` | `/rov_cmd_vel` | non-empty | publish する速度指令 topic |
 | `target_x` | `float` | `0.0` | finite | 目標 x 位置 [m] |
 | `target_y` | `float` | `0.0` | finite | 目標 y 位置 [m] |
@@ -97,8 +89,7 @@ parameter は launch 引数または YAML から変更できること。未指�
 | `max_linear_speed` | `float` | `0.5` | `>= 0.0` | 並進方向の最大速度指令 |
 | `min_angular_speed` | `float` | `0.0` | `0.0 <= min_angular_speed <= max_angular_speed` | yaw の最小角速度指令 |
 | `max_angular_speed` | `float` | `0.5` | `>= 0.0` | yaw 角速度の最大値 |
-| `position_timeout` | `float` | `0.5` | `> 0.0` | UWB 位置の timeout [s] |
-| `heading_timeout` | `float` | `0.5` | `> 0.0` | ZED heading の timeout [s] |
+| `pose_timeout` | `float` | `0.5` | `> 0.0` | 姿勢stampの許容経過時間 [s] |
 | `control_rate` | `float` | `20.0` | `> 0.0` | 制御周期 [Hz] |
 
 ### 6.1 許容マージン要求
@@ -220,7 +211,7 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 
 | ID | Requirement |
 | --- | --- |
-| CF-001 | UWB 位置と ZED heading の両方が recent かつ valid の場合のみ制御を行うこと。 |
+| CF-001 | 中心姿勢が有効でstampがpose_timeout以内 の場合のみ制御を行うこと。 |
 | CF-002 | 到達条件を満たした場合、`/rov_cmd_vel` に zero velocity を publish し続けること。 |
 | CF-003 | tolerance 外では、P 制御により目標方向へ速度指令を出すこと。 |
 | CF-004 | 位置制御と yaw 制御は独立に計算し、同時に指令できること。 |
@@ -231,12 +222,12 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 
 | ID | Failure Case | Required Behavior |
 | --- | --- | --- |
-| FC-001 | `/uwb/position` が未受信 | zero velocity を publish する |
-| FC-002 | `/zed/heading` が未受信 | zero velocity を publish する |
-| FC-003 | `/uwb/position` の `valid == false` | zero velocity を publish する |
-| FC-004 | `/zed/heading` の `valid == false` | zero velocity を publish する |
-| FC-005 | `position_timeout` を超えて UWB 位置が更新されない | zero velocity を publish する |
-| FC-006 | `heading_timeout` を超えて ZED heading が更新されない | zero velocity を publish する |
+| FC-001 | 中心姿勢が未受信 | zero velocity を publish する |
+| FC-002 | 受信frameが設定と不一致 | zero velocity を publish する |
+| FC-003 | 位置またはQuaternionに非有限値 | zero velocity を publish する |
+| FC-004 | Quaternionのノルムが不正 | zero velocity を publish する |
+| FC-005 | 姿勢stampがpose_timeoutを超過 | zero velocity を publish する |
+| FC-006 | 姿勢stampが未来時刻 | zero velocity を publish する |
 | FC-007 | parameter validation に失敗する | 起動時に error とし、制御を開始しない |
 | FC-008 | UWB 位置または yaw が finite value でない | 該当サンプルを invalid として扱い、zero velocity を publish する |
 
@@ -256,8 +247,7 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 
 | Topic | 確認内容 |
 | --- | --- |
-| `/uwb/position` | `x_m`, `y_m`, `valid` の安定性と目標近傍の揺れ |
-| `/zed/heading` | `robot_yaw_rad`, `valid` の安定性と yaw drift |
+| `/uwb/robot_pose` | 中心位置・姿勢・stampの安定性と目標近傍の揺れ |
 | `/rov_cmd_vel` | `linear.x`, `linear.y`, `angular.z` の符号、飽和、目標近傍の反転 |
 | `rov/motors` | 速度指令に対する motor command の変化 |
 
@@ -298,3 +288,9 @@ abs(wrap_pi(target_yaw - current_yaw)) <= yaw_tolerance
 ## Mode Managerとの統合（2026-09-08）
 
 `managed_mode=true` の場合、単体用の `/rov_cmd_vel` 出力を作成せず、実行ID・状態・速度をまとめた `ControllerOutput` をManagerへ送る。初期値falseでは従来の単体速度topicを使用する。Managerからの有効化・リセットとtimeoutを扱う。詳細は [Mode Manager仕様](../../mode_manager/doc/mode_manager_spec_ja.md) を参照する。
+
+## 入力移行と起動
+
+旧 `uwb_position_topic` / `zed_heading_topic` は `robot_pose_topic` に、旧 `position_timeout` / `heading_timeout` は `pose_timeout` に置き換える。独自YAMLも更新すること。目標x/yはタグ位置ではなく中心位置を指定する。
+
+`uwb_zed_docking.launch.py` と `managed_docking.launch.py` は中心補正ノードを1つ起動する。`docking.launch.py` はmanaged launchを介して起動する。`robot_pose_config` 引数で補正ノードのYAMLを指定できる。コントローラ単独launchでは補正ノードを別途起動する。

@@ -13,7 +13,6 @@
   <depend>rclpy</depend>
   <depend>mode_manager</depend>
   <depend>uwb_interfaces</depend>
-  <depend>zed_interfaces</depend>
 
   <test_depend>ament_copyright</test_depend>
   <test_depend>ament_flake8</test_depend>

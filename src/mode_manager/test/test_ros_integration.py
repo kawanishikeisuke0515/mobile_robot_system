@@ -7,6 +7,7 @@ rclpy = pytest.importorskip('rclpy')
 pytest.importorskip('mode_manager_interfaces.msg')
 pytest.importorskip('uwb_position_zed_pose_ctrl.uwb_position_zed_pose_ctrl')
 pytest.importorskip('vision_dist_ctrl.vision_distance_controller')
+pytest.importorskip('uwb_robot_pose_publisher.uwb_robot_pose_publisher')
 from aruco_interfaces.msg import ArucoDistance
 from geometry_msgs.msg import Twist
 from rclpy.executors import SingleThreadedExecutor
@@ -15,6 +16,7 @@ from std_srvs.srv import Trigger
 from uwb_interfaces.msg import UwbPosition
 from zed_interfaces.msg import ZedHeading
 from mode_manager.node import ModeManager
+from uwb_robot_pose_publisher.uwb_robot_pose_publisher import UwbRobotPosePublisher
 from uwb_position_zed_pose_ctrl.uwb_position_zed_pose_ctrl import UwbPositionZedPoseController
 from vision_dist_ctrl.vision_distance_controller import VisionDistanceController
 
@@ -30,8 +32,9 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         manager = ModeManager()
         uwb = UwbPositionZedPoseController()
         vision = VisionDistanceController()
+        correction = UwbRobotPosePublisher()
         probe = Node('mode_manager_test_probe')
-        nodes.extend([manager, uwb, vision, probe])
+        nodes.extend([manager, uwb, vision, correction, probe])
         for node in nodes:
             executor.add_node(node)
         position_pub = probe.create_publisher(UwbPosition, '/uwb/position', 10)
@@ -39,7 +42,7 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         marker_pub = probe.create_publisher(ArucoDistance, '/aruco/distance', 10)
         observed = []
         probe.create_subscription(Twist, '/rov_cmd_vel', lambda msg: observed.append(msg), 10)
-        position = UwbPosition(x_m=0.0, y_m=-1.0, valid=False)
+        position = UwbPosition(x_m=0.010, y_m=-0.665, valid=False)
         heading = ZedHeading(robot_yaw_rad=0.0, valid=True)
         marker = ArucoDistance(id=7, z=1.3, yaw=0.0, normalized_center_error=0.0)
         use_marker = True
@@ -47,6 +50,9 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         def pump_until(predicate, timeout=3.):
             deadline = time.monotonic() + timeout
             while time.monotonic() < deadline:
+                stamp = probe.get_clock().now().to_msg()
+                position.header.stamp = stamp
+                heading.header.stamp = stamp
                 position_pub.publish(position)
                 heading_pub.publish(heading)
                 if use_marker:
@@ -65,7 +71,7 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         if not auto_start:
             assert manager.start(Trigger.Request(), Trigger.Response()).success
         pump_until(lambda: any(msg.linear.x > 0 for msg in observed))
-        position.y_m = 0.0
+        position.y_m = 0.335
         pump_until(lambda: manager.machine.state == 'VISION_DOCKING')
         pump_until(lambda: vision.state == 'FINAL_DOCKING')
         use_marker = False
@@ -77,12 +83,12 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         pump_until(lambda: not uwb._has_valid_inputs())
         assert manager.machine.state == 'UWB_RECOVERY'
         position.valid = True
-        position.y_m = -0.5
+        position.y_m = -0.165
         marker.id = 99
         use_marker = True
         pump_until(lambda: uwb._has_valid_inputs())
         assert manager.machine.state == 'UWB_RECOVERY'
-        position.y_m = 0.0
+        position.y_m = 0.335
         pump_until(lambda: manager.machine.state == 'VISION_WAIT')
         # Wrong-ID samples cannot restore tracking.
         start = time.monotonic()
@@ -102,7 +108,7 @@ def test_real_controllers_handoff_recovery_completion_and_stop(auto_start):
         assert manager.stop(Trigger.Request(), Trigger.Response()).success
         assert manager.machine.state == 'IDLE'
         # A manager heartbeat outage invalidates the controller lease.
-        position.y_m = -0.5
+        position.y_m = -0.165
         assert manager.start(Trigger.Request(), Trigger.Response()).success
         pump_until(lambda: uwb.link.active)
         for timer in manager.timers:

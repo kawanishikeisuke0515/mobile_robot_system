@@ -17,6 +17,8 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument('manager_config', default_value=config(
             'mode_manager', 'mode_manager.yaml')),
+        DeclareLaunchArgument('robot_pose_config', default_value=config(
+            'uwb_robot_pose_publisher', 'uwb_robot_pose_publisher.yaml')),
         DeclareLaunchArgument('uwb_controller_config', default_value=config(
             'uwb_position_zed_pose_ctrl', 'uwb_position_zed_pose_ctrl.yaml')),
         DeclareLaunchArgument('vision_config', default_value=config(
@@ -35,6 +37,8 @@ def generate_launch_description():
              parameters=[LaunchConfiguration('manager_config'),
                          {'target_marker_id': number('target_marker_id', int),
                           'auto_start': number('auto_start', bool)}]),
+        Node(package='uwb_robot_pose_publisher', executable='uwb_robot_pose_publisher',
+             output='screen', parameters=[LaunchConfiguration('robot_pose_config')]),
         Node(package='uwb_position_zed_pose_ctrl', executable='uwb_position_zed_pose_ctrl',
              output='screen', parameters=[LaunchConfiguration('uwb_controller_config'), {
                  'managed_mode': True,

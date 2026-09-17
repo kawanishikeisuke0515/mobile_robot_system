@@ -3,24 +3,23 @@ import os
 from typing import Optional
 
 import rclpy
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import PoseStamped, Twist
 from mode_manager.controller_link import ControllerLink
 from rclpy.node import Node
-from rclpy.time import Time
-from uwb_interfaces.msg import UwbPosition, UwbControlError
-from zed_interfaces.msg import ZedHeading
+from uwb_interfaces.msg import UwbControlError
 
 from .pose_control import PoseControlConfig
 from .pose_control import calculate_pose_command
 from .pose_control import is_finite
+from .pose_control import wrap_pi
 
 
 class UwbPositionZedPoseController(Node):
     def __init__(self):
         super().__init__('uwb_position_zed_pose_ctrl')
 
-        self.declare_parameter('uwb_position_topic', '/uwb/position')
-        self.declare_parameter('zed_heading_topic', '/zed/heading')
+        self.declare_parameter('robot_pose_topic', '/uwb/robot_pose')
+        self.declare_parameter('world_frame_id', 'world')
         self.declare_parameter('cmd_vel_topic', '/rov_cmd_vel')
         self.declare_parameter('target_x', 0.0)
         self.declare_parameter('target_y', 0.0)
@@ -35,12 +34,11 @@ class UwbPositionZedPoseController(Node):
         self.declare_parameter('max_linear_speed', 0.5)
         self.declare_parameter('min_angular_speed', 0.0)
         self.declare_parameter('max_angular_speed', 0.5)
-        self.declare_parameter('position_timeout', 0.5)
-        self.declare_parameter('heading_timeout', 0.5)
+        self.declare_parameter('pose_timeout', 0.5)
         self.declare_parameter('control_rate', 20.0)
 
-        self.uwb_position_topic = str(self.get_parameter('uwb_position_topic').value)
-        self.zed_heading_topic = str(self.get_parameter('zed_heading_topic').value)
+        self.robot_pose_topic = str(self.get_parameter('robot_pose_topic').value)
+        self.world_frame_id = str(self.get_parameter('world_frame_id').value)
         self.cmd_vel_topic = str(self.get_parameter('cmd_vel_topic').value)
         self.config = PoseControlConfig(
             target_x=float(self.get_parameter('target_x').value),
@@ -57,15 +55,14 @@ class UwbPositionZedPoseController(Node):
             min_angular_speed=float(self.get_parameter('min_angular_speed').value),
             max_angular_speed=float(self.get_parameter('max_angular_speed').value),
         )
-        self.position_timeout = float(self.get_parameter('position_timeout').value)
-        self.heading_timeout = float(self.get_parameter('heading_timeout').value)
+        self.pose_timeout = float(self.get_parameter('pose_timeout').value)
         self.control_rate = float(self.get_parameter('control_rate').value)
         self._validate_parameters()
 
-        self.latest_position: Optional[UwbPosition] = None
-        self.latest_heading: Optional[ZedHeading] = None
-        self.last_position_time: Optional[Time] = None
-        self.last_heading_time: Optional[Time] = None
+        self.latest_pose: Optional[PoseStamped] = None
+        self.current_yaw = 0.0
+        self.last_pose_stamp = None
+        self.last_clock_ns = None
         self.was_waiting_for_inputs = True
         self.was_target_reached = False
 
@@ -76,33 +73,22 @@ class UwbPositionZedPoseController(Node):
         self.cmd_publisher = None
         if not self.link.managed:
             self.cmd_publisher = self.create_publisher(Twist, self.cmd_vel_topic, 10)
-        self.create_subscription(
-            UwbPosition,
-            self.uwb_position_topic,
-            self.position_callback,
-            10,
-        )
-        self.create_subscription(
-            ZedHeading,
-            self.zed_heading_topic,
-            self.heading_callback,
-            10,
-        )
+        self.create_subscription(PoseStamped, self.robot_pose_topic, self.pose_callback, 10)
         self.control_timer = self.create_timer(
             1.0 / self.control_rate,
             self.control_callback,
         )
 
         self.get_logger().info(
-            'subscribing %s and %s; publishing %s'
-            % (self.uwb_position_topic, self.zed_heading_topic,
+            'subscribing %s; publishing %s'
+            % (self.robot_pose_topic,
                '/uwb/control_output' if self.link.managed else self.cmd_vel_topic)
         )
         self.get_logger().info(
             'target=(%.3f, %.3f, %.3f) tolerance=(%.3f, %.3f, %.3f) '
             'kp=(%.3f, %.3f, %.3f) min_speed=(%.3f, %.3f) '
             'max_speed=(%.3f, %.3f) '
-            'timeout=(%.3f, %.3f) control_rate=%.1f'
+            'pose_timeout=%.3f control_rate=%.1f'
             % (
                 self.config.target_x,
                 self.config.target_y,
@@ -117,17 +103,14 @@ class UwbPositionZedPoseController(Node):
                 self.config.min_angular_speed,
                 self.config.max_linear_speed,
                 self.config.max_angular_speed,
-                self.position_timeout,
-                self.heading_timeout,
+                self.pose_timeout,
                 self.control_rate,
             )
         )
 
     def _validate_parameters(self):
-        if self.uwb_position_topic == '':
-            raise ValueError('uwb_position_topic must not be empty')
-        if self.zed_heading_topic == '':
-            raise ValueError('zed_heading_topic must not be empty')
+        if not self.robot_pose_topic.strip() or not self.world_frame_id.strip():
+            raise ValueError('robot_pose_topic and world_frame_id must not be empty')
         if self.cmd_vel_topic == '':
             raise ValueError('cmd_vel_topic must not be empty')
         if not is_finite(
@@ -144,8 +127,7 @@ class UwbPositionZedPoseController(Node):
             self.config.max_linear_speed,
             self.config.min_angular_speed,
             self.config.max_angular_speed,
-            self.position_timeout,
-            self.heading_timeout,
+            self.pose_timeout,
             self.control_rate,
         ):
             raise ValueError('numeric parameters must be finite')
@@ -173,32 +155,49 @@ class UwbPositionZedPoseController(Node):
             raise ValueError('max_angular_speed must be greater than or equal to 0')
         if self.config.min_angular_speed > self.config.max_angular_speed:
             raise ValueError('min_angular_speed must be less than or equal to max_angular_speed')
-        if self.position_timeout <= 0.0:
-            raise ValueError('position_timeout must be greater than 0')
-        if self.heading_timeout <= 0.0:
-            raise ValueError('heading_timeout must be greater than 0')
+        if self.pose_timeout <= 0.0:
+            raise ValueError('pose_timeout must be greater than 0')
         if self.control_rate <= 0.0:
             raise ValueError('control_rate must be greater than 0')
 
-    def position_callback(self, msg: UwbPosition):
-        self.latest_position = msg
-        self.last_position_time = self.get_clock().now()
+    def _now_ns(self):
+        now = self.get_clock().now().nanoseconds
+        if self.last_clock_ns is not None and now < self.last_clock_ns:
+            self._reset_control()
+            self.last_pose_stamp = None
+        self.last_clock_ns = now
+        return now
 
-    def heading_callback(self, msg: ZedHeading):
-        self.latest_heading = msg
-        self.last_heading_time = self.get_clock().now()
+    def pose_callback(self, msg: PoseStamped):
+        now = self._now_ns()
+        stamp = msg.header.stamp.sec * 10**9 + msg.header.stamp.nanosec
+        p, q = msg.pose.position, msg.pose.orientation
+        norm = math.hypot(q.x, q.y, q.z, q.w)
+        if (msg.header.frame_id != self.world_frame_id
+                or not is_finite(p.x, p.y, p.z, q.x, q.y, q.z, q.w, norm)
+                or norm < 1e-12 or abs(norm - 1.0) > 1e-3
+                or not 0 <= (now - stamp) * 1e-9 <= self.pose_timeout):
+            self.latest_pose = None
+            return
+        if self.last_pose_stamp is not None and stamp <= self.last_pose_stamp:
+            return
+        x, y, z, w = (v / norm for v in (q.x, q.y, q.z, q.w))
+        world_yaw = math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
+        # Preserve existing controller/target convention: zero points along world +Y.
+        self.current_yaw = wrap_pi(world_yaw - math.pi / 2)
+        self.latest_pose = msg
+        self.last_pose_stamp = stamp
 
     def _reset_control(self):
         self.was_target_reached = False
-        self.last_position_time = None
-        self.last_heading_time = None
+        self.latest_pose = None
 
     def control_callback(self):
         active = self.link.active
         cmd = Twist()
         if not self._has_valid_inputs():
             if not self.was_waiting_for_inputs:
-                self.get_logger().warn('UWB position or ZED heading unavailable; stopping robot')
+                self.get_logger().warn('Robot center pose unavailable; stopping robot')
             self.was_waiting_for_inputs = True
             self.was_target_reached = False
             self._publish_error(None, active)
@@ -207,9 +206,9 @@ class UwbPositionZedPoseController(Node):
 
         self.was_waiting_for_inputs = False
         result = calculate_pose_command(
-            current_x=float(self.latest_position.x_m),
-            current_y=float(self.latest_position.y_m),
-            current_yaw=float(self.latest_heading.robot_yaw_rad),
+            current_x=float(self.latest_pose.pose.position.x),
+            current_y=float(self.latest_pose.pose.position.y),
+            current_yaw=self.current_yaw,
             config=self.config,
         )
         self._publish_error(result.debug, active)
@@ -239,29 +238,9 @@ class UwbPositionZedPoseController(Node):
         self.error_publisher.publish(msg)
 
     def _has_valid_inputs(self) -> bool:
-        if (
-            self.latest_position is None
-            or self.latest_heading is None
-            or self.last_position_time is None
-            or self.last_heading_time is None
-        ):
-            return False
-        if not self.latest_position.valid or not self.latest_heading.valid:
-            return False
-        if not is_finite(
-            float(self.latest_position.x_m),
-            float(self.latest_position.y_m),
-            float(self.latest_heading.robot_yaw_rad),
-        ):
-            return False
-
-        now = self.get_clock().now()
-        position_elapsed = (now - self.last_position_time).nanoseconds * 1e-9
-        heading_elapsed = (now - self.last_heading_time).nanoseconds * 1e-9
-        return (
-            0.0 <= position_elapsed <= self.position_timeout
-            and 0.0 <= heading_elapsed <= self.heading_timeout
-        )
+        now = self._now_ns()
+        return (self.latest_pose is not None and self.last_pose_stamp is not None
+                and 0 <= (now - self.last_pose_stamp) * 1e-9 <= self.pose_timeout)
 
 
 def main(args=None):

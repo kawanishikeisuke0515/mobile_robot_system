@@ -6,8 +6,7 @@ import pytest
 
 rclpy = pytest.importorskip('rclpy')
 pytest.importorskip('uwb_interfaces.msg')
-from uwb_interfaces.msg import UwbPosition
-from zed_interfaces.msg import ZedHeading
+from geometry_msgs.msg import PoseStamped
 from uwb_position_zed_pose_ctrl.uwb_position_zed_pose_ctrl import UwbPositionZedPoseController
 
 
@@ -18,27 +17,31 @@ def test_control_error_matches_calculation(tmp_path, monkeypatch):
     try:
         node = UwbPositionZedPoseController()
         messages = []
+        commands = []
+        node.cmd_publisher = SimpleNamespace(publish=commands.append)
         node.error_publisher = SimpleNamespace(publish=messages.append)
-        position = UwbPosition()
-        position.valid = True
-        heading = ZedHeading()
-        heading.valid = True
-        node.position_callback(position)
-        node.heading_callback(heading)
+        position = PoseStamped()
+        position.header.frame_id = 'world'
+        position.header.stamp = node.get_clock().now().to_msg()
+        position.pose.orientation.z = math.sqrt(.5)
+        position.pose.orientation.w = math.sqrt(.5)
+        node.pose_callback(position)
         node.control_callback()
         error = messages[-1]
         assert error.inputs_valid and error.active
         assert error.distance_error_m == 5.
         assert error.error_body_x == 4.
         assert error.error_body_y == 3.
-        # Inside x tolerance: retain raw distance while zeroing the P input.
-        position.x_m = 2.99
-        node.position_callback(position)
+        # Inside lateral tolerance: keep diagnostic error, zero the velocity.
+        position.pose.position.x = 2.99
+        position.header.stamp = node.get_clock().now().to_msg()
+        node.pose_callback(position)
         node.control_callback()
         assert messages[-1].raw_error_world_x == pytest.approx(.01, abs=1e-6)
-        assert messages[-1].error_body_y == 0.
+        assert messages[-1].error_body_y == pytest.approx(.01)
+        assert commands[-1].linear.y == 0.
         # Missing/stale inputs must invalidate the previous numerical errors.
-        node.last_position_time = None
+        node.latest_pose = None
         node.control_callback()
         assert not messages[-1].inputs_valid
         assert math.isnan(messages[-1].distance_error_m)
