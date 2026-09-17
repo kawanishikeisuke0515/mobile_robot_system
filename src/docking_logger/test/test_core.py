@@ -119,3 +119,37 @@ def test_control_error_csv_timeline_and_invalid_input(tmp_path):
     state.receive('uwb_control_error', decode('uwb_control_error', msg), 300, .3)
     assert state.snapshot(400, .4)['uwb_control_error_value_valid'] is False
     assert state.snapshot(500, 2.)['uwb_control_error_stale'] is True
+
+
+@pytest.mark.parametrize('stream', ['uwb_robot_pose', 'optitrack'])
+def test_pose_csv_timeline_and_validity(tmp_path, stream):
+    state = samples()
+    assert state.snapshot(0, 0)[stream + '_received'] is False
+    msg = NS(header=NS(stamp=NS(sec=12, nanosec=34), frame_id='world'),
+             pose=NS(position=NS(x=1.25, y=-2., z=0.),
+                     orientation=NS(x=0., y=0., z=0.6, w=0.8)))
+    row = state.receive(stream, decode(stream, msg), 100, .1)
+    snapshot = state.snapshot(200, .2)
+    assert snapshot[stream + '_value_valid'] is True
+    assert snapshot[stream + '_stale'] is False
+    assert state.snapshot(300, 1.2)[stream + '_stale'] is True
+    writer = CsvWriter(tmp_path, 'poses', {})
+    writer.submit(stream, row)
+    writer.submit('timeline', snapshot)
+    writer.close()
+    with (writer.path / (stream + '.csv')).open() as file:
+        saved = next(csv.DictReader(file))
+    with (writer.path / 'timeline.csv').open() as file:
+        timeline = next(csv.DictReader(file))
+    for field in FIELDS[stream] + ['source_stamp_ns', 'frame_id']:
+        assert saved[field] == str(row[field])
+        assert timeline[stream + '_' + field] == saved[field]
+    metadata = yaml.safe_load((writer.path / 'metadata.yaml').read_text())
+    assert metadata['schema_version'] == 3
+    msg.pose.position.x = float('nan')
+    assert not valid_value(stream, decode(stream, msg))
+    msg.pose.position.x = 1.
+    msg.pose.orientation.w = float('inf')
+    assert not valid_value(stream, decode(stream, msg))
+    msg.pose.orientation.w = msg.pose.orientation.z = 0.
+    assert not valid_value(stream, decode(stream, msg))

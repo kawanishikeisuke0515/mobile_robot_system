@@ -24,6 +24,7 @@ STREAMS = {
     'deadman': (Bool, '/deadman'),
     'uwb_control_error': (UwbControlError, '/uwb/control_error'),
     'uwb': (UwbPosition, '/uwb/position'),
+    'uwb_robot_pose': (PoseStamped, '/uwb/robot_pose'),
     'zed_heading': (ZedHeading, '/zed/heading'),
     'optitrack': (PoseStamped, '/vrpn_mocap/RigidBody_1/pose'),
     'vision': (ArucoDistance, '/aruco/distance'),
@@ -113,6 +114,8 @@ class DockingLogger(Node):
             'time': {'receive': 'ROS clock nanoseconds', 'elapsed': 'monotonic seconds',
                      'source': 'original message stamp, blank when absent'},
             'coordinates': {'uwb': 'anchor-defined x/y [m]',
+                            'uwb_robot_pose': 'robot center in source frame [m], quaternion xyzw; '
+                                              'tag offset corrected by publisher',
                             'uwb_control_error': 'controller world/body errors [m], yaw [rad]; '
                                                  'distance is raw world error norm',
                             'zed_heading': 'configured robot yaw [rad/deg]',

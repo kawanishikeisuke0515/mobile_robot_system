@@ -13,6 +13,7 @@ import yaml
 
 COMMON = ['sample_seq', 'recv_ros_time_ns', 'elapsed_sec', 'source_stamp_ns', 'frame_id']
 TWIST = [f'{part}_{axis}' for part in ('linear', 'angular') for axis in 'xyz']
+POSE = ['position_x', 'position_y', 'position_z', 'qx', 'qy', 'qz', 'qw']
 CONTROL = ['session_id', 'active', 'inputs_valid', 'target_reached', 'tracking_valid',
            'docking_complete', 'target_marker_id', 'detection_sequence']
 FIELDS = {
@@ -24,9 +25,10 @@ FIELDS = {
                           'raw_error_world_y', 'error_world_x', 'error_world_y',
                           'error_body_x', 'error_body_y', 'distance_error_m', 'yaw_error'],
     'uwb': ['x_m', 'y_m', 'valid', 'device_time_ms'],
+    'uwb_robot_pose': POSE,
     'zed_heading': ['raw_x', 'raw_z', 'corrected_x', 'corrected_z',
                     'magnetic_heading_deg', 'robot_yaw_deg', 'robot_yaw_rad', 'valid'],
-    'optitrack': ['position_x', 'position_y', 'position_z', 'qx', 'qy', 'qz', 'qw'],
+    'optitrack': POSE,
     'vision': ['id', 'x', 'y', 'z', 'distance', 'theta', 'yaw', 'center_u', 'center_v',
                'normalized_center_error'],
     'control_state': ['data'],
@@ -65,7 +67,7 @@ def decode(key, msg):
         # JSON strings preserve non-finite values while keeping valid JSON syntax.
         row.update(element_count=len(values), shape_valid=len(values) == 4,
                    data_json=json.dumps([v if math.isfinite(v) else str(v) for v in values]))
-    elif key == 'optitrack':
+    elif key in ('optitrack', 'uwb_robot_pose'):
         row.update({f'position_{a}': getattr(msg.pose.position, a) for a in 'xyz'})
         row.update({f'q{a}': getattr(msg.pose.orientation, a) for a in 'xyzw'})
     elif key.endswith('_control_output'):
@@ -81,7 +83,7 @@ def valid_value(key, row):
         'cmd_vel': TWIST, 'motor_commands': [f'motor_{i}' for i in range(4)],
         'uwb_control_error': FIELDS['uwb_control_error'][3:],
         'uwb': ['x_m', 'y_m'], 'zed_heading': ['robot_yaw_rad', 'robot_yaw_deg'],
-        'optitrack': FIELDS['optitrack'], 'vision': ['x', 'y', 'z', 'distance', 'theta', 'yaw'],
+        'uwb_robot_pose': POSE, 'optitrack': POSE, 'vision': ['x', 'y', 'z', 'distance', 'theta', 'yaw'],
     }.get(key)
     if fields is None:
         return ''
@@ -92,7 +94,7 @@ def valid_value(key, row):
         finite = finite and row['inputs_valid']
     if key in ('uwb', 'zed_heading'):
         finite = finite and row['valid']
-    if key == 'optitrack':
+    if key in ('optitrack', 'uwb_robot_pose'):
         finite = finite and any(row['q' + a] != 0 for a in 'xyzw')
     return bool(finite)
 
@@ -144,7 +146,7 @@ class CsvWriter:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
         self.path = Path(log_dir).expanduser().resolve() / f'{timestamp}_{name}_{self.record_id[:8]}'
         self.path.mkdir(parents=True, exist_ok=False)
-        self.metadata = dict(metadata, schema_version=2, record_id=self.record_id,
+        self.metadata = dict(metadata, schema_version=3, record_id=self.record_id,
                              started_at=utc_now(), status='recording', output_dir=str(self.path))
         self.queue = queue.Queue(maxsize=capacity)
         self.flush_interval = flush_interval

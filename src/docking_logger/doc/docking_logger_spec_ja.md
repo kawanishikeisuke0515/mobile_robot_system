@@ -4,7 +4,7 @@
 
 `docking_bringup` 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。
 
-本書はスキーマバージョン2の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
+本書はスキーマバージョン3の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
 
 ## 2. 配置と責務
 
@@ -38,6 +38,7 @@ mobile_robot_system/src/docking_logger/
 | 最終速度指令 | `/rov_cmd_vel` | `geometry_msgs/msg/Twist` | linear x/y/z、angular x/y/z |
 | モーター指令 | `/rov/motors` | `std_msgs/msg/Float32MultiArray` | 4要素の指令値、受信要素数 |
 | 駆動許可 | `/deadman` | `std_msgs/msg/Bool` | data |
+| UWBロボット中心位置・姿勢 | `/uwb/robot_pose` | `geometry_msgs/msg/PoseStamped` | position x/y/z、quaternion x/y/z/w、header |
 | UWB位置 | `/uwb/position` | `uwb_interfaces/msg/UwbPosition` | x_m、y_m、valid、device_time_ms、header |
 | UWB制御誤差 | `/uwb/control_error` | `uwb_interfaces/msg/UwbControlError` | 制御計算で使用した位置・姿勢誤差、距離、session_id、active、inputs_valid、header |
 | ZED heading | `/zed/heading` | `zed_interfaces/msg/ZedHeading` | raw_x/z、corrected_x/z、magnetic_heading_deg、robot_yaw_deg/rad、valid、header |
@@ -81,8 +82,16 @@ mobile_robot_system/src/docking_logger/
 - 制御が非activeでも入力が有効なら誤差を記録する。`active` と `session_id` を併記し、動作中かどうかを区別する。
 - header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。
 - Controller側のトピックパラメータは `control_error_topic`、ロガー側は `uwb_control_error_topic`。両方の初期値は `/uwb/control_error`。
-- 追加CSVは `uwb_control_error.csv`。timelineでは `uwb_control_error_` 接頭辞で全列と鮮度を保存する。metadataの `schema_version` は2。
+- 追加CSVは `uwb_control_error.csv`。timelineでは `uwb_control_error_` 接頭辞で全列と鮮度を保存する。metadataの `schema_version` は3。
 - 利用前に `uwb_interfaces`、UWB Controller、`docking_logger` を再ビルドし、同じ新しいinterface環境をsourceする。
+
+### 3.4 UWBロボット中心位置・姿勢
+
+`uwb_robot_pose_topic`（初期値 `/uwb/robot_pose`、`geometry_msgs/msg/PoseStamped`）を購読し、タグ取り付けオフセット補正後のロボット中心位置・姿勢を記録する。変換は `uwb_robot_pose_publisher` が行い、ロガーでは再計算しない。
+
+`uwb_robot_pose.csv` に position_x/y/z［m］、qx/qy/qz/qw、元のタイムスタンプと frame_id、受信時刻を保存する。`timeline.csv` にも `uwb_robot_pose_` 接頭辞で値と received/age_sec/stale/value_valid を保存する。
+
+value_validは全位置・姿勢成分が有限でQuaternionが全ゼロでないことを表す。PoseStampedにvalidフラグはないため、未受信と受信停止はreceivedとstaleで確認する。timelineは各ストリームの最新値であり、厳密な時刻同期は行わない。
 
 ## 4. 保存形式
 
@@ -93,6 +102,7 @@ mobile_robot_system/src/docking_logger/
 ├── motor_commands.csv
 ├── deadman.csv
 ├── uwb.csv
+├── uwb_robot_pose.csv
 ├── uwb_control_error.csv
 ├── zed_heading.csv
 ├── optitrack.csv
