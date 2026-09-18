@@ -31,7 +31,7 @@ li { margin: 5px 0; }
 <h1>Docking Logger 仕様書</h1>
 <h2>1. 目的と状態</h2>
 <p><code>docking_bringup</code> 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。</p>
-<p>本書はスキーマバージョン3の実装仕様。専用の <code>docking_logger</code> パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の <code>uwb_optitrack_logger</code> に合わせる。以下の初期値・詳細設計を初版の実装基準とする。</p>
+<p>本書はスキーマバージョン4の実装仕様。専用の <code>docking_logger</code> パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の <code>uwb_optitrack_logger</code> に合わせる。以下の初期値・詳細設計を初版の実装基準とする。</p>
 <h2>2. 配置と責務</h2>
 <pre><code class="language-text">mobile_robot_system/src/docking_logger/
 ├── docking_logger/
@@ -94,6 +94,12 @@ li { margin: 5px 0; }
 <td><code>/uwb/position</code></td>
 <td><code>uwb_interfaces/msg/UwbPosition</code></td>
 <td>x_m、y_m、valid、device_time_ms、header</td>
+</tr>
+<tr>
+<td>UWB制御誤差</td>
+<td><code>/uwb/control_error</code></td>
+<td><code>uwb_interfaces/msg/UwbControlError</code></td>
+<td>制御計算で使用した位置・姿勢誤差、距離、session_id、active、inputs_valid、header</td>
 </tr>
 <tr>
 <td>ZED heading</td>
@@ -160,7 +166,7 @@ li { margin: 5px 0; }
 <li>制御が非activeでも入力が有効なら誤差を記録する。<code>active</code> と <code>session_id</code> を併記し、動作中かどうかを区別する。</li>
 <li>header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。</li>
 <li>Controller側のトピックパラメータは <code>control_error_topic</code>、ロガー側は <code>uwb_control_error_topic</code>。両方の初期値は <code>/uwb/control_error</code>。</li>
-<li>追加CSVは <code>uwb_control_error.csv</code>。timelineでは <code>uwb_control_error_</code> 接頭辞で全列と鮮度を保存する。metadataの <code>schema_version</code> は3。</li>
+<li>追加CSVは <code>uwb_control_error.csv</code>。timelineでは <code>uwb_control_error_</code> 接頭辞で全列と鮮度を保存する。metadataの <code>schema_version</code> は4。</li>
 <li>利用前に <code>uwb_interfaces</code>、UWB Controller、<code>docking_logger</code> を再ビルドし、同じ新しいinterface環境をsourceする。</li>
 </ul>
 <h3>3.4 UWBロボット中心位置・姿勢</h3>
@@ -173,6 +179,7 @@ li { margin: 5px 0; }
 ├── cmd_vel.csv
 ├── motor_commands.csv
 ├── deadman.csv
+├── jetson_power.csv
 ├── uwb.csv
 ├── uwb_robot_pose.csv
 ├── uwb_control_error.csv
@@ -419,6 +426,7 @@ li { margin: 5px 0; }
 <li>キュー超過・書き込み失敗を検出して通知し、ロボットへ指令を送らない。</li>
 <li>bringup起動とロガー単体起動の両方が利用でき、enable_logging=falseでロガーを起動しない。</li>
 <li>metadataに実験条件と提供された設定・上書き値が残り、未知の設定を取得済みとして扱わない。</li>
+<li>UWBのP制御に使用した機体座標誤差と目標までの距離が個別CSV・timelineに残り、入力無効時はnanとinputs_valid=falseで識別できる。</li>
 <li>実機でログ有効時の制御周期・CPU負荷・キュー破棄数を確認し、実験に必要な周期で継続記録できることを確認する。</li>
 </ol>
 <h2>10. 実装・検証メモ</h2>
@@ -437,5 +445,10 @@ stream名は個別CSVの拡張子を除いた名前を使う。</li>
 ROSメッセージとタイマーを使った直接callback試験を含む。</li>
 <li>実機の別ノード間通信、長時間の記録負荷、制御周期への影響は実機確認が必要。</li>
 </ul>
+<h2>Jetson電力の記録（schema_version 4）</h2>
+<p><code>jetson_power_topic</code>（初期値 <code>/jetson/power</code>）から <code>jetson_interfaces/msg/JetsonPower</code> を購読する。<code>jetson_power.csv</code> に共通時刻列とtotal_power_rail、power_w、average_power_w、valid、status、raw_lineを保存する。timelineには <code>jetson_power_</code> 接頭辞で同じ値と鮮度を追加する。</p>
+<p>計測範囲はJetsonモジュールの対象レール。単位はW、平均値はtegrastatsの報告値であり、ロボット全体の電力ではない。value_validはvalidフラグと電力2値の有限性・非負性で判定する。異常通知でも受信鮮度は更新されるため、staleだけでは正常計測と判断しない。</p>
+<p><code>jetson_power_stale_timeout_sec</code> の初期値は3秒。未起動でも他の記録を継続する。電力取得ノードは別途起動する。ビルド時には <code>jetson_interfaces</code> が必要。</p>
+<p>詳細は <a href="../../jetson_power_publisher/doc/jetson_power_publisher_spec_ja.md">Jetson電力取得仕様書</a> を参照。</p>
 </main></body>
 </html>

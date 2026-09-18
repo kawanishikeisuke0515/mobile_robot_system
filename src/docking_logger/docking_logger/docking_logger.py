@@ -11,6 +11,7 @@ from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rcl_interfaces.msg import ParameterDescriptor
 from geometry_msgs.msg import Twist, PoseStamped
 from std_msgs.msg import Bool, Float32MultiArray, String
+from jetson_interfaces.msg import JetsonPower
 from uwb_interfaces.msg import UwbPosition, UwbControlError
 from zed_interfaces.msg import ZedHeading
 from aruco_interfaces.msg import ArucoDistance
@@ -19,6 +20,7 @@ from mode_manager_interfaces.msg import ControllerOutput
 from .core import CsvWriter, Samples, decode
 
 STREAMS = {
+    'jetson_power': (JetsonPower, '/jetson/power'),
     'cmd_vel': (Twist, '/rov_cmd_vel'),
     'motor_commands': (Float32MultiArray, '/rov/motors'),
     'deadman': (Bool, '/deadman'),
@@ -90,7 +92,7 @@ class DockingLogger(Node):
             topic = self.parameter(topic_param, topic_default)
             if not topic.strip():
                 raise ValueError(f'{topic_param} must not be empty')
-            thresholds[key] = self.positive(key + '_stale_timeout_sec', stale)
+            thresholds[key] = self.positive(key + '_stale_timeout_sec', 3.0 if key == 'jetson_power' else stale)
             reliability = self.parameter(key + '_reliability',
                                          'best_effort' if key == 'optitrack' else 'reliable')
             if reliability not in ('reliable', 'best_effort'):
@@ -113,6 +115,8 @@ class DockingLogger(Node):
             'external_effective_settings': 'unknown; only supplied configuration is captured',
             'time': {'receive': 'ROS clock nanoseconds', 'elapsed': 'monotonic seconds',
                      'source': 'original message stamp, blank when absent'},
+            'power': {'scope': 'Jetson module / configured rail', 'unit': 'W',
+                      'average': 'tegrastats reported average; averaging window unspecified'},
             'coordinates': {'uwb': 'anchor-defined x/y [m]',
                             'uwb_robot_pose': 'robot center in source frame [m], quaternion xyzw; '
                                               'tag offset corrected by publisher',

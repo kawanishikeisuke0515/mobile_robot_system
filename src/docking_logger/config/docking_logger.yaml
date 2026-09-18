@@ -1,5 +1,7 @@
 docking_logger:
   ros__parameters:
+    jetson_power_topic: /jetson/power
+    jetson_power_stale_timeout_sec: 3.0
     log_rate: 20.0
     flush_interval_sec: 1.0
     stale_timeout_sec: 1.0

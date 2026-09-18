@@ -4,7 +4,7 @@
 
 `docking_bringup` 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。
 
-本書はスキーマバージョン3の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
+本書はスキーマバージョン4の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
 
 ## 2. 配置と責務
 
@@ -82,7 +82,7 @@ mobile_robot_system/src/docking_logger/
 - 制御が非activeでも入力が有効なら誤差を記録する。`active` と `session_id` を併記し、動作中かどうかを区別する。
 - header.stampは制御計算時刻でありセンサ計測時刻ではない。世界座標・機体座標が混在するためheader.frame_idは空欄。制御出力トピックとの厳密な同時受信は保証しない。
 - Controller側のトピックパラメータは `control_error_topic`、ロガー側は `uwb_control_error_topic`。両方の初期値は `/uwb/control_error`。
-- 追加CSVは `uwb_control_error.csv`。timelineでは `uwb_control_error_` 接頭辞で全列と鮮度を保存する。metadataの `schema_version` は3。
+- 追加CSVは `uwb_control_error.csv`。timelineでは `uwb_control_error_` 接頭辞で全列と鮮度を保存する。metadataの `schema_version` は4。
 - 利用前に `uwb_interfaces`、UWB Controller、`docking_logger` を再ビルドし、同じ新しいinterface環境をsourceする。
 
 ### 3.4 UWBロボット中心位置・姿勢
@@ -101,6 +101,7 @@ value_validは全位置・姿勢成分が有限でQuaternionが全ゼロでな�
 ├── cmd_vel.csv
 ├── motor_commands.csv
 ├── deadman.csv
+├── jetson_power.csv
 ├── uwb.csv
 ├── uwb_robot_pose.csv
 ├── uwb_control_error.csv
@@ -287,3 +288,13 @@ ros2 launch docking_logger docking_logger.launch.py \
 - 自動テストで未受信、鮮度、対象ID選択、異常値、終了時排出、キュー超過、書き込み失敗を確認。
   ROSメッセージとタイマーを使った直接callback試験を含む。
 - 実機の別ノード間通信、長時間の記録負荷、制御周期への影響は実機確認が必要。
+
+## Jetson電力の記録（schema_version 4）
+
+`jetson_power_topic`（初期値 `/jetson/power`）から `jetson_interfaces/msg/JetsonPower` を購読する。`jetson_power.csv` に共通時刻列とtotal_power_rail、power_w、average_power_w、valid、status、raw_lineを保存する。timelineには `jetson_power_` 接頭辞で同じ値と鮮度を追加する。
+
+計測範囲はJetsonモジュールの対象レール。単位はW、平均値はtegrastatsの報告値であり、ロボット全体の電力ではない。value_validはvalidフラグと電力2値の有限性・非負性で判定する。異常通知でも受信鮮度は更新されるため、staleだけでは正常計測と判断しない。
+
+`jetson_power_stale_timeout_sec` の初期値は3秒。未起動でも他の記録を継続する。電力取得ノードは別途起動する。ビルド時には `jetson_interfaces` が必要。
+
+詳細は [Jetson電力取得仕様書](../../jetson_power_publisher/doc/jetson_power_publisher_spec_ja.md) を参照。

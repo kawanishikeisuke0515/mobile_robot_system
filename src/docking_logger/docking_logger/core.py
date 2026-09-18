@@ -17,6 +17,7 @@ POSE = ['position_x', 'position_y', 'position_z', 'qx', 'qy', 'qz', 'qw']
 CONTROL = ['session_id', 'active', 'inputs_valid', 'target_reached', 'tracking_valid',
            'docking_complete', 'target_marker_id', 'detection_sequence']
 FIELDS = {
+    'jetson_power': ['total_power_rail', 'power_w', 'average_power_w', 'valid', 'status', 'raw_line'],
     'cmd_vel': TWIST,
     'motor_commands': ['motor_0', 'motor_1', 'motor_2', 'motor_3', 'element_count',
                        'shape_valid', 'data_json'],
@@ -79,6 +80,9 @@ def decode(key, msg):
 
 
 def valid_value(key, row):
+    if key == 'jetson_power':
+        return bool(row['valid'] and all(
+            math.isfinite(row[f]) and row[f] >= 0 for f in ('power_w', 'average_power_w')))
     fields = {
         'cmd_vel': TWIST, 'motor_commands': [f'motor_{i}' for i in range(4)],
         'uwb_control_error': FIELDS['uwb_control_error'][3:],
@@ -146,7 +150,7 @@ class CsvWriter:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
         self.path = Path(log_dir).expanduser().resolve() / f'{timestamp}_{name}_{self.record_id[:8]}'
         self.path.mkdir(parents=True, exist_ok=False)
-        self.metadata = dict(metadata, schema_version=3, record_id=self.record_id,
+        self.metadata = dict(metadata, schema_version=4, record_id=self.record_id,
                              started_at=utc_now(), status='recording', output_dir=str(self.path))
         self.queue = queue.Queue(maxsize=capacity)
         self.flush_interval = flush_interval

@@ -145,7 +145,7 @@ def test_pose_csv_timeline_and_validity(tmp_path, stream):
         assert saved[field] == str(row[field])
         assert timeline[stream + '_' + field] == saved[field]
     metadata = yaml.safe_load((writer.path / 'metadata.yaml').read_text())
-    assert metadata['schema_version'] == 3
+    assert metadata['schema_version'] == 4
     msg.pose.position.x = float('nan')
     assert not valid_value(stream, decode(stream, msg))
     msg.pose.position.x = 1.
@@ -153,3 +153,28 @@ def test_pose_csv_timeline_and_validity(tmp_path, stream):
     assert not valid_value(stream, decode(stream, msg))
     msg.pose.orientation.w = msg.pose.orientation.z = 0.
     assert not valid_value(stream, decode(stream, msg))
+
+
+def test_power_csv_and_invalid_notifications(tmp_path):
+    state = samples()
+    assert not state.snapshot(0, 0)['jetson_power_received']
+    msg = NS(header=NS(stamp=NS(sec=10, nanosec=20), frame_id=''),
+             total_power_rail='VDD_IN', power_w=5., average_power_w=4.5,
+             valid=True, status='ok', raw_line='VDD_IN 5000/4500')
+    row = state.receive('jetson_power', decode('jetson_power', msg), 100, .1)
+    writer = CsvWriter(tmp_path, 'power', {})
+    writer.submit('jetson_power', row)
+    writer.submit('timeline', state.snapshot(200, .2))
+    writer.close()
+    with (writer.path / 'jetson_power.csv').open() as f:
+        saved = next(csv.DictReader(f))
+    assert saved['power_w'] == '5.0'
+    assert saved['source_stamp_ns'] == '10000000020'
+    with (writer.path / 'timeline.csv').open() as f:
+        assert next(csv.DictReader(f))['jetson_power_value_valid'] == 'true'
+    msg.valid, msg.status, msg.raw_line = False, 'timeout', ''
+    msg.power_w = msg.average_power_w = float('nan')
+    state.receive('jetson_power', decode('jetson_power', msg), 300, .3)
+    snap = state.snapshot(400, .4)
+    assert not snap['jetson_power_value_valid'] and not snap['jetson_power_stale']
+    assert state.snapshot(500, 2.)['jetson_power_stale']
