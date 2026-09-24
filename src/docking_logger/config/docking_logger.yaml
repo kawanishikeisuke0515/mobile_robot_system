@@ -14,6 +14,8 @@ docking_logger:
     uwb_control_error_topic: /uwb/control_error
     uwb_topic: /uwb/position
     uwb_robot_pose_topic: /uwb/robot_pose
+    zed_odom_topic: /zed2i/zed_node/odom
+    zed_odom_reliability: best_effort
     zed_heading_topic: /zed/heading
     optitrack_pose_topic: /vrpn_mocap/RigidBody_1/pose
     vision_topic: /aruco/distance

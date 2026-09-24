@@ -4,7 +4,7 @@
 
 `docking_bringup` 実行中のモーター指令、ZED heading、UWB位置、OptiTrack姿勢、Vision位置情報を記録し、指令と実際の動き、制御モードの切り替えを後から比較できるようにする。
 
-本書はスキーマバージョン4の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
+本書はスキーマバージョン5の実装仕様。専用の `docking_logger` パッケージ・ノードで記録する。シリアル送信内容は記録対象外とし、OptiTrackの初期トピックは既存の `uwb_optitrack_logger` に合わせる。以下の初期値・詳細設計を初版の実装基準とする。
 
 ## 2. 配置と責務
 
@@ -298,3 +298,15 @@ ros2 launch docking_logger docking_logger.launch.py \
 `jetson_power_stale_timeout_sec` の初期値は3秒。未起動でも他の記録を継続する。電力取得ノードは別途起動する。ビルド時には `jetson_interfaces` が必要。
 
 詳細は [Jetson電力取得仕様書](../../jetson_power_publisher/doc/jetson_power_publisher_spec_ja.md) を参照。
+
+## ZED odometry記録（スキーマ5）
+
+`zed_odom_topic`（既定 `/zed2i/zed_node/odom`、`nav_msgs/msg/Odometry`）を購読し、受信ごとに `zed_odom.csv`、既存の周期で `timeline.csv` に保存する。既定の `zed_odom_reliability` は `best_effort`。
+
+- `linear_x/y/z` は並進速度 [m/s]、`angular_x/y/z` は角速度 [rad/s]。元の値を変換せず保存する。
+- 位置・姿勢、送信時刻・受信時刻、`frame_id` と `child_frame_id`、pose/twistの共分散（36要素のJSON配列）も保存する。
+- 位置・姿勢は `frame_id`、速度は `child_frame_id` 基準。ロボット中心や車体座標への変換は行わない。
+- `value_valid` は位置・姿勢・速度が有限値でクォータニオンが非ゼロであることだけを示す。ZEDの追跡品質や共分散の妥当性は判定しない。
+- 未受信・受信後の経過時間・staleも他ストリームと同様に記録する。timelineは最新値の並置であり、センサー時刻の同期・補間は行わない。
+
+`timeline.csv` の `motor_commands_motor_0`〜`3` および `cmd_vel_linear_x/y` 等と、`zed_odom_linear_x/y`・`zed_odom_angular_z` を比較できる。座標系と各ストリームの時刻・ageを確認して解析する。

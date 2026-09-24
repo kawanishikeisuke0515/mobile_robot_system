@@ -10,6 +10,7 @@ from rclpy.executors import ExternalShutdownException
 from rclpy.qos import QoSProfile, ReliabilityPolicy, DurabilityPolicy
 from rcl_interfaces.msg import ParameterDescriptor
 from geometry_msgs.msg import Twist, PoseStamped
+from nav_msgs.msg import Odometry
 from std_msgs.msg import Bool, Float32MultiArray, String
 from jetson_interfaces.msg import JetsonPower
 from uwb_interfaces.msg import UwbPosition, UwbControlError
@@ -27,6 +28,7 @@ STREAMS = {
     'uwb_control_error': (UwbControlError, '/uwb/control_error'),
     'uwb': (UwbPosition, '/uwb/position'),
     'uwb_robot_pose': (PoseStamped, '/uwb/robot_pose'),
+    'zed_odom': (Odometry, '/zed2i/zed_node/odom'),
     'zed_heading': (ZedHeading, '/zed/heading'),
     'optitrack': (PoseStamped, '/vrpn_mocap/RigidBody_1/pose'),
     'vision': (ArucoDistance, '/aruco/distance'),
@@ -94,7 +96,7 @@ class DockingLogger(Node):
                 raise ValueError(f'{topic_param} must not be empty')
             thresholds[key] = self.positive(key + '_stale_timeout_sec', 3.0 if key == 'jetson_power' else stale)
             reliability = self.parameter(key + '_reliability',
-                                         'best_effort' if key == 'optitrack' else 'reliable')
+                                         'best_effort' if key in ('optitrack', 'zed_odom') else 'reliable')
             if reliability not in ('reliable', 'best_effort'):
                 raise ValueError(f'Invalid reliability for {key}: {reliability}')
             qos = QoSProfile(depth=depth, durability=DurabilityPolicy.VOLATILE,
@@ -122,6 +124,9 @@ class DockingLogger(Node):
                                               'tag offset corrected by publisher',
                             'uwb_control_error': 'controller world/body errors [m], yaw [rad]; '
                                                  'distance is raw world error norm',
+                            'zed_odom': 'pose in header.frame_id [m], quaternion xyzw; '
+                                        'twist in child_frame_id: linear [m/s], angular [rad/s]; '
+                                        'value_valid checks numeric pose/twist only, not tracking quality',
                             'zed_heading': 'configured robot yaw [rad/deg]',
                             'optitrack': 'original frame position [m], quaternion xyzw',
                             'vision': 'marker relative to camera: right x, down y, forward z [m]; angles [rad]',

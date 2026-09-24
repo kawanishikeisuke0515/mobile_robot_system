@@ -145,7 +145,7 @@ def test_pose_csv_timeline_and_validity(tmp_path, stream):
         assert saved[field] == str(row[field])
         assert timeline[stream + '_' + field] == saved[field]
     metadata = yaml.safe_load((writer.path / 'metadata.yaml').read_text())
-    assert metadata['schema_version'] == 4
+    assert metadata['schema_version'] == 5
     msg.pose.position.x = float('nan')
     assert not valid_value(stream, decode(stream, msg))
     msg.pose.position.x = 1.
@@ -178,3 +178,42 @@ def test_power_csv_and_invalid_notifications(tmp_path):
     snap = state.snapshot(400, .4)
     assert not snap['jetson_power_value_valid'] and not snap['jetson_power_stale']
     assert state.snapshot(500, 2.)['jetson_power_stale']
+
+
+def test_zed_odom_csv_timeline_and_validity(tmp_path):
+    state = samples()
+    assert not state.snapshot(0, 0)['zed_odom_received']
+    msg = NS(header=NS(stamp=NS(sec=12, nanosec=34), frame_id='odom'),
+             child_frame_id='camera_link',
+             pose=NS(pose=NS(position=NS(x=1., y=2., z=0.),
+                             orientation=NS(x=0., y=0., z=0., w=1.)),
+                     covariance=[0.1] * 36),
+             twist=NS(twist=NS(linear=NS(x=.3, y=-.2, z=0.),
+                               angular=NS(x=0., y=0., z=.05)),
+                      covariance=[0.2] * 36))
+    row = state.receive('zed_odom', decode('zed_odom', msg), 100, .1)
+    snap = state.snapshot(200, .2)
+    assert snap['zed_odom_value_valid']
+    assert state.snapshot(300, 1.2)['zed_odom_stale']
+    writer = CsvWriter(tmp_path, 'odom', {})
+    writer.submit('zed_odom', row)
+    writer.submit('timeline', snap)
+    writer.close()
+    assert writer.error is None
+    with (writer.path / 'zed_odom.csv').open() as f:
+        saved = next(csv.DictReader(f))
+    with (writer.path / 'timeline.csv').open() as f:
+        timeline = next(csv.DictReader(f))
+    assert saved['linear_x'] == '0.3'
+    assert saved['angular_z'] == '0.05'
+    assert saved['source_stamp_ns'] == '12000000034'
+    assert saved['frame_id'] == 'odom'
+    assert saved['child_frame_id'] == 'camera_link'
+    assert json.loads(saved['twist_covariance_json']) == [0.2] * 36
+    for field in FIELDS['zed_odom']:
+        assert timeline['zed_odom_' + field] == saved[field]
+    msg.twist.twist.linear.x = float('nan')
+    assert not valid_value('zed_odom', decode('zed_odom', msg))
+    msg.twist.twist.linear.x = 0.
+    msg.pose.pose.orientation.w = 0.
+    assert not valid_value('zed_odom', decode('zed_odom', msg))
