@@ -109,7 +109,8 @@ class DockingLogger(Node):
                 'topic': sub.topic_name,
                 'type': message_type.__module__.split('.')[0] + '/msg/' + message_type.__name__,
                 'reliability': reliability, 'durability': 'volatile', 'depth': depth}
-        self.samples = Samples(target, thresholds)
+        window = self.parameter('zed_velocity_window', 5)
+        self.samples = Samples(target, thresholds, window)
         metadata = {
             'experiment_name': name, 'experiment_note': note, 'parameters': self.params,
             'streams': qos_settings, 'config_snapshots': snapshots,

@@ -145,7 +145,7 @@ def test_pose_csv_timeline_and_validity(tmp_path, stream):
         assert saved[field] == str(row[field])
         assert timeline[stream + '_' + field] == saved[field]
     metadata = yaml.safe_load((writer.path / 'metadata.yaml').read_text())
-    assert metadata['schema_version'] == 5
+    assert metadata['schema_version'] == 6
     msg.pose.position.x = float('nan')
     assert not valid_value(stream, decode(stream, msg))
     msg.pose.position.x = 1.
@@ -217,3 +217,41 @@ def test_zed_odom_csv_timeline_and_validity(tmp_path):
     msg.twist.twist.linear.x = 0.
     msg.pose.pose.orientation.w = 0.
     assert not valid_value('zed_odom', decode('zed_odom', msg))
+
+
+def test_zed_moving_average_window_and_resets():
+    state = Samples(7, {key: 1.0 for key in FIELDS}, zed_velocity_window=3)
+    from docking_logger.core import TWIST
+    def feed(value, stamp, elapsed, frame='base', invalid=False):
+        row = dict(source_stamp_ns=stamp, frame_id='odom', child_frame_id=frame,
+                   position_x=0., position_y=0., position_z=0.,
+                   qx=0., qy=0., qz=0., qw=1.)
+        row.update({f: value for f in TWIST})
+        if invalid:
+            row['linear_x'] = float('nan')
+        return state.receive('zed_odom', row, stamp, elapsed)
+    for i, value in enumerate([1., 2., 3., 7.]):
+        row = feed(value, (i+1)*100000000, i*.1)
+    assert row['linear_x'] == 7.
+    assert row['ma_linear_x'] == pytest.approx(4.)
+    assert row['ma_angular_z'] == pytest.approx(4.)
+    assert row['ma_sample_count'] == 3
+    # Timer snapshots do not add duplicate samples.
+    for i in range(5):
+        assert state.snapshot(0, .4)['zed_odom_ma_sample_count'] == 3
+    assert feed(8., 500000000, 2.)['ma_sample_count'] == 1
+    assert feed(9., 600000000, 2.1, frame='other')['ma_sample_count'] == 1
+    assert feed(10., 600000000, 2.2, frame='other')['ma_sample_count'] == 1
+    assert feed(11., 500000000, 2.3, frame='other')['ma_sample_count'] == 1
+    row = feed(12., 700000000, 2.4, invalid=True)
+    assert row['ma_sample_count'] == 0
+    import math
+    assert math.isnan(row['ma_linear_x'])
+    assert feed(13., 800000000, 2.5)['ma_linear_x'] == 13.
+    assert feed(14., 3000000000, 2.6)['ma_sample_count'] == 1
+
+
+@pytest.mark.parametrize('window', [0, -1, 1.5, True])
+def test_invalid_zed_window(window):
+    with pytest.raises(ValueError):
+        Samples(7, {key: 1. for key in FIELDS}, window)

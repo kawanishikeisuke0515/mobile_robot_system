@@ -1,4 +1,5 @@
 """ROS-independent CSV schema, snapshots and bounded asynchronous storage."""
+from collections import deque
 import csv
 import json
 import math
@@ -27,7 +28,8 @@ FIELDS = {
                           'error_body_x', 'error_body_y', 'distance_error_m', 'yaw_error'],
     'uwb': ['x_m', 'y_m', 'valid', 'device_time_ms'],
     'uwb_robot_pose': POSE,
-    'zed_odom': ['child_frame_id'] + POSE + TWIST + ['pose_covariance_json', 'twist_covariance_json'],
+    'zed_odom': ['child_frame_id'] + POSE + TWIST + ['pose_covariance_json', 'twist_covariance_json']
+                + ['ma_' + f for f in TWIST] + ['ma_sample_count'],
     'zed_heading': ['raw_x', 'raw_z', 'corrected_x', 'corrected_z',
                     'magnetic_heading_deg', 'robot_yaw_deg', 'robot_yaw_rad', 'valid'],
     'optitrack': POSE,
@@ -115,7 +117,10 @@ def valid_value(key, row):
 class Samples:
     """Lock-protected latest samples; unrelated marker IDs do not refresh the target."""
 
-    def __init__(self, target_marker_id, thresholds):
+    def __init__(self, target_marker_id, thresholds, zed_velocity_window=5):
+        if type(zed_velocity_window) is not int or zed_velocity_window < 1:
+            raise ValueError("zed_velocity_window must be a positive integer")
+        self.zed_history = deque(maxlen=zed_velocity_window)
         self.target = target_marker_id
         self.thresholds = thresholds
         self.latest = {}
@@ -128,9 +133,33 @@ class Samples:
             self.sequences[key] += 1
             row = dict(values, sample_seq=self.sequences[key], recv_ros_time_ns=ros_ns,
                        elapsed_sec=elapsed)
+            if key == 'zed_odom':
+                self.average_zed(row)
             if key != 'vision' or row['id'] == self.target:
                 self.latest[key] = row
             return row
+
+    def average_zed(self, row):
+        # Called under the samples lock, once per received odometry message.
+        previous = self.latest.get('zed_odom')
+        if previous is not None and (
+                row['elapsed_sec'] - previous['elapsed_sec'] > self.thresholds['zed_odom']
+                or row['source_stamp_ns'] <= previous['source_stamp_ns']
+                or (row['source_stamp_ns'] - previous['source_stamp_ns']) * 1e-9
+                > self.thresholds['zed_odom']
+                or row['frame_id'] != previous['frame_id']
+                or row['child_frame_id'] != previous['child_frame_id']):
+            self.zed_history.clear()
+        if valid_value('zed_odom', row):
+            self.zed_history.append(tuple(row[f] for f in TWIST))
+        else:
+            self.zed_history.clear()
+        count = len(self.zed_history)
+        row['ma_sample_count'] = count
+        for i, field in enumerate(TWIST):
+            row['ma_' + field] = (
+                sum(sample[i] / count for sample in self.zed_history)
+                if count else float('nan'))
 
     def snapshot(self, ros_ns, elapsed):
         with self.lock:
@@ -159,7 +188,7 @@ class CsvWriter:
         timestamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S_%fZ')
         self.path = Path(log_dir).expanduser().resolve() / f'{timestamp}_{name}_{self.record_id[:8]}'
         self.path.mkdir(parents=True, exist_ok=False)
-        self.metadata = dict(metadata, schema_version=5, record_id=self.record_id,
+        self.metadata = dict(metadata, schema_version=6, record_id=self.record_id,
                              started_at=utc_now(), status='recording', output_dir=str(self.path))
         self.queue = queue.Queue(maxsize=capacity)
         self.flush_interval = flush_interval
