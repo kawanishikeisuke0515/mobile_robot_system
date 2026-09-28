@@ -17,7 +17,13 @@ ros2 launch locomotion_closed_loop closed_loop_velocity.launch.py
 ros2 launch locomotion_closed_loop closed_loop_velocity.launch.py params_file:=/absolute/path/closed_loop_velocity.yaml
 ```
 
-launchは制御ノードのみを起動する。ZED_WRAPPERとモータードライバーは別に起動する。既存の `rover_velocity` は停止し、`/rov/motors` の発行元を本ノードだけにする。
+launchは制御ノードと既存の `locomotion_core/cmd_roboteq` を起動する。ZED_WRAPPERは別に起動する。`locomotion_core` もビルド・source済みであること。既存の `rover_velocity` は停止し、`/rov/motors` の発行元を本ノードだけにする。
+
+ドライバーを別で起動済みの場合は、重複起動を避けるため次を使用する。
+
+```bash
+ros2 launch locomotion_closed_loop closed_loop_velocity.launch.py start_motor_driver:=false
+```
 
 ## 実機に合わせる設定
 
