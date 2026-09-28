@@ -1,4 +1,4 @@
-"""Three-axis P velocity controller with ZED feedback."""
+"""Three-axis PI velocity controller with ZED feedback."""
 import json
 import math
 import time
@@ -24,6 +24,7 @@ class ClosedLoopVelocity(Node):
                         control_frequency=30., command_timeout=0.5, odom_timeout=0.5,
                         max_odom_age=0.5, future_tolerance=0.05,
                         kp_x=0.1, kp_y=0.1, kp_yaw=0.1,
+                        ki_x=0.2, ki_y=0.2, ki_yaw=0.2,
                         gain_x=1000., gain_y=1000., gain_yaw=30.,
                         velocity_filter_enabled=True, velocity_filter_window_size=5,
                         motor_command_limit=0., wheel_lever=375., wheel_radius=63.5)
@@ -39,6 +40,7 @@ class ClosedLoopVelocity(Node):
             raise ValueError('body_frame is required')
         self.core = VelocityControl(
             kp=tuple(p['kp_'+axis] for axis in ('x', 'y', 'yaw')),
+            ki=tuple(p['ki_'+axis] for axis in ('x', 'y', 'yaw')),
             gains=tuple(p['gain_'+axis] for axis in ('x', 'y', 'yaw')),
             window=p['velocity_filter_window_size'], filter_enabled=p['velocity_filter_enabled'],
             motor_limit=p['motor_command_limit'], command_timeout=p['command_timeout'],

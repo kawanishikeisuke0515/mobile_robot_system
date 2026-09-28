@@ -1,13 +1,13 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>3軸クローズドループ速度制御 仕様書 v0.6</title><style>body{margin:0;background:#f3f5f8;color:#172638;font:16px/1.8 system-ui,-apple-system,"Noto Sans JP",sans-serif}main{max-width:1080px;margin:32px auto;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 24px #17263810}h1{font-size:1.9rem;border-bottom:4px solid #207d91;padding-bottom:18px}h2{margin-top:2.4em;border-left:5px solid #207d91;padding-left:14px;font-size:1.35rem}a{color:#086981}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;margin:20px 0;font-size:.94rem}th,td{border:1px solid #d5dfe8;padding:10px 14px;text-align:left;vertical-align:top}th{background:#eaf2f6}tr:nth-child(even){background:#f8fafc}pre{overflow:auto;background:#102b3b;color:#e7f3f9;padding:20px;border-radius:8px;line-height:1.6}code{font-family:ui-monospace,monospace;font-size:.92em}p code,li code,td code{background:#edf2f7;padding:2px 4px;border-radius:3px}nav{background:#eaf2f6;padding:12px 18px;border-radius:6px}@media(max-width:700px){main{margin:0;padding:20px;border-radius:0}h1{font-size:1.5rem}}@media print{body{background:white;font-size:10pt}main{margin:0;max-width:none;padding:0;box-shadow:none}pre{background:#f0f3f6;color:black;white-space:pre-wrap}h2{break-after:avoid}tr{break-inside:avoid}nav{display:none}}</style></head><body><main><nav>検討用ドラフト v0.6 · <a href="closed_loop_spec_ja.md">Markdown版</a></nav><h1>3軸クローズドループ速度制御 仕様書</h1>
-<p>版：0.6 ／ 作成日：2026-09-28 ／ 状態：検討用ドラフト</p>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>3軸クローズドループ速度制御 仕様書 v0.7</title><style>body{margin:0;background:#f3f5f8;color:#172638;font:16px/1.8 system-ui,-apple-system,"Noto Sans JP",sans-serif}main{max-width:1080px;margin:32px auto;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 24px #17263810}h1{font-size:1.9rem;border-bottom:4px solid #207d91;padding-bottom:18px}h2{margin-top:2.4em;border-left:5px solid #207d91;padding-left:14px;font-size:1.35rem}a{color:#086981}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;margin:20px 0;font-size:.94rem}th,td{border:1px solid #d5dfe8;padding:10px 14px;text-align:left;vertical-align:top}th{background:#eaf2f6}tr:nth-child(even){background:#f8fafc}pre{overflow:auto;background:#102b3b;color:#e7f3f9;padding:20px;border-radius:8px;line-height:1.6}code{font-family:ui-monospace,monospace;font-size:.92em}p code,li code,td code{background:#edf2f7;padding:2px 4px;border-radius:3px}nav{background:#eaf2f6;padding:12px 18px;border-radius:6px}@media(max-width:700px){main{margin:0;padding:20px;border-radius:0}h1{font-size:1.5rem}}@media print{body{background:white;font-size:10pt}main{margin:0;max-width:none;padding:0;box-shadow:none}pre{background:#f0f3f6;color:black;white-space:pre-wrap}h2{break-after:avoid}tr{break-inside:avoid}nav{display:none}}</style></head><body><main><nav>検討用ドラフト v0.7 · <a href="closed_loop_spec_ja.md">Markdown版</a></nav><h1>3軸クローズドループ速度制御 仕様書</h1>
+<p>版：0.7 ／ 作成日：2026-09-28 ／ 状態：検討用ドラフト</p>
 <h2>1. 目的と範囲</h2>
 <p><code>locomotion_core</code> とは別の <code>mobile_robot_system/src/locomotion_closed_loop/</code> に、ZED_WRAPPERからの実測速度を使う車体速度制御を構築する。前後・左右・旋回の3軸を対象とする。</p>
 <p>本書は仕様のたたき台。v0.4で初期実装を追加した。既存locomotion_coreは変更せず、別パッケージとして提供する。以下の案・未決定事項に対する暫定実装値と未実装範囲は第14節に記載する。</p>
 <h2>2. 合意済みの前提</h2>
 <ul>
 <li>制御対象は前後 <code>vx</code>、左右 <code>vy</code>、旋回 <code>wz</code> の3軸すべて。</li>
-<li>初期実装はP制御のみとする。I項・D項は実装しない。</li>
+<li>v0.7でPI制御へ拡張する。D項は実装しない。</li>
 <li>目標速度入力は既存の <code>/rov_cmd_vel</code>（<code>geometry_msgs/msg/Twist</code>）を想定する。会話中の <code>rov_vel_cmd</code> に対し、コード上の名称は <code>/rov_cmd_vel</code>。</li>
 <li><code>linear.x</code> と <code>linear.y</code> は m/s、<code>angular.z</code> は rad/s。</li>
 <li>フィードバックにはZED_WRAPPERの速度を使用し、移動平均フィルタを掛けて使えるようにする。</li>
@@ -124,7 +124,7 @@
 </table>
 <p>トピック名はパラメーターまたはremapで変更できる構成を想定する。ZEDトピック名は既存のdata hub仕様書に基づく候補であり、実機の型・更新周期・QoS・速度フィールドの配信状況を確認する。</p>
 <h2>6. 実測速度の座標系</h2>
-<p><strong>v0.6の採用仕様：カメラ基準を使用する。</strong> <code>use_camera_frame: true</code> を初期設定とし、ZED odomのtwistをそのまま移動平均・P制御へ渡す。目標速度も同じ軸基準として扱う。TF検索は行わず、base_linkは不要。以下の車体基準変換は <code>use_camera_frame: false</code> を指定した場合だけ適用する。構成図とフィルタ節の「車体基準」は、カメラ基準モードでは「ZEDから受け取った基準」と読み替える。</p>
+<p><strong>v0.5の採用仕様：カメラ基準を使用する。</strong> <code>use_camera_frame: true</code> を初期設定とし、ZED odomのtwistをそのまま移動平均・P制御へ渡す。目標速度も同じ軸基準として扱う。TF検索は行わず、base_linkは不要。以下の車体基準変換は <code>use_camera_frame: false</code> を指定した場合だけ適用する。構成図とフィルタ節の「車体基準」は、カメラ基準モードでは「ZEDから受け取った基準」と読み替える。</p>
 <p>比較する目標速度と実測速度は、車体基準の同じ座標系・同じ基準点にそろえる。車体軸は前方を+x、左方を+y、上方を+zとする案。正のwzは上から見た反時計回りとする。</p>
 <p>ZED odomの <code>child_frame_id</code> と、速度が表す基準点を実機で確認する。カメラ基準の速度である場合は、軸の回転変換だけでなく、車体中心からカメラまでの取付位置も考慮する。すでに車体基準に変換された速度を二重に補正しない。</p>
 <p>車体中心からカメラ基準点へのベクトルを車体座標で <code>r</code> とすると、剛体の関係は次の通り。</p>
@@ -152,15 +152,16 @@ q_meas    = q_filtered[k]
 <p>窓サイズを大きくすると速度の細かな揺れを抑えられる一方、応答が遅くなる。等間隔のサンプル周期をTとすると、窓が満ちた移動平均の遅延の目安は <code>(N−1)×T/2</code>。例えば30 Hz・N=5なら約67 msであり、ZED自体や通信の遅延は別に加わる。これは説明用の例で、実機の配信周期や採用値を示すものではない。</p>
 <p>本方式はサンプル数による窓であり、時間幅固定の平均ではない。到着間隔が変動すると履歴の時間幅も変わるため、使用サンプル数と最古・最新の計測時刻の差を診断に記録する。有効を初期設定とする案とし、Nの初期値はノイズ・遅延・追従性を比較して決める。</p>
 <h2>7. 制御則案</h2>
-<p>3軸を独立したP制御で補正する。目標速度を基本入力として加え、速度誤差に比例する補正を上乗せする。I項・D項は使用しない。横移動・前後移動・旋回でゲインを別々に設定する。</p>
+<p>3軸を独立したPI制御で補正する。目標速度を基本入力として加え、速度誤差に比例する補正を上乗せする。D項は使用しない。横移動・前後移動・旋回でゲインを別々に設定する。</p>
 <pre><code class="language-text">q_target = [vx_target, vy_target, wz_target]
 q_meas   = [vx_filtered, vy_filtered, wz_filtered]  # フィルタ無効時は最新の車体基準実測値
 e        = q_target − q_meas
-q_ctrl   = q_target + Kp ⊙ e
+I        = I + e × dt
+q_ctrl   = q_target + Kp ⊙ e + Ki ⊙ I
 u_raw    = M × (G ⊙ q_ctrl)
 </code></pre>
 <p><code>⊙</code> は軸ごとの積、<code>M</code> は4輪への配分行列、<code>G</code> はモーター出力を調整する軸別ゲイン。P補正は並進m/s・旋回rad/sの段階で行い、出力ゲインとは分離する。<code>Kp</code> は無次元。<code>G</code> と <code>M</code> を通した結果の指令単位はドライバー仕様を確認して定義する。</p>
-<p>現行の1000・1000・30は比較用の既存値として記録し、新しい閉ループ制御の確定ゲインとはしない。制御周期、ゲイン、移動平均の窓サイズは計測後に決定する。今回の実装にはKi、積分状態、積分上限、アンチワインドアップ処理を設けない。P制御で残る定常誤差は評価結果として記録する。</p>
+<p>現行の1000・1000・30は比較用の既存値として記録し、新しい閉ループ制御の確定ゲインとはしない。制御周期、ゲイン、移動平均の窓サイズは計測後に決定する。v0.7ではKiと積分状態を追加し、出力飽和に基づく積分抑制を行う。詳細は第16節。</p>
 <h2>8. 固定±15制限の撤廃と最終出力</h2>
 <p>撤廃対象は <code>rover_velocity.py</code> にある各輪の固定 <code>±15</code> 制限。新実装ではこの制限を引き継がない。既存ノード自体も変更するかは実装範囲として別途決める。</p>
 <p>ドライバー指令の許容範囲を確認したうえで、最終出力上限をパラメーターにする案。共通上限を <code>Umax</code> とすると、上限超過時は次の比率で4輪を一括縮小する。</p>
@@ -313,7 +314,7 @@ u_out = scale × u_raw
 <tbody>
 <tr>
 <td>制御</td>
-<td>目標速度＋3軸独立P補正。各Kpは暫定0.1</td>
+<td>目標速度＋3軸独立PI補正。各Kpは暫定0.1、各Kiは暫定0.2 [1/s]</td>
 </tr>
 <tr>
 <td>周期</td>
@@ -363,6 +364,11 @@ u_out = scale × u_raw
 </table>
 <p>これらの数値は実機チューニング済みの値ではない。モーター指令上限は未確定のため、実機で確認した正の上限を設定するまで駆動しない。</p>
 <p>追跡状態トピックの購読・品質異常判定は未実装。odom鮮度・非有限値・時刻逆行・TF取得失敗を検出する。ドライバー側ウォッチドッグとdeadman発行は実装範囲に含めていない。制御ノード終了時のゼロ送信はROSコンテキストが有効な場合のベストエフォートであり、通信断や強制終了への停止保証は実機側・ドライバー側で対応する。</p>
-<h2>15. カメラ基準への変更（v0.6）</h2>
+<h2>15. カメラ基準への変更（v0.5）</h2>
 <p>ユーザー指定によりカメラ基準を標準に変更。ノード既定値とYAMLの両方で <code>use_camera_frame: true</code> とし、TFリスナーも生成しない。モーター指令上限・速度鮮度検証・移動平均・P補正は従来通り適用する。</p>
+<h2>16. PI制御への拡張（v0.7）</h2>
+<p>ユーザー確認済みの式に従い、移動平均後の速度誤差を実測制御間隔dtで積分する。<code>ki_x / ki_y / ki_yaw</code> は暫定0.2 [1/s]。0ならその軸の積分を無効化する。既存出力ゲインとモーター上限は変更しない。</p>
+<p>積分の単位は並進m、旋回rad。I補正の単位は並進m/s、旋回rad/s。初回とリセット直後はdt=0とし、長い制御中断（目標・odomタイムアウトの小さい方を超える間隔）や時間逆行では積分を破棄する。</p>
+<p>x、y、yaw順に積分更新案を4輪出力へ反映し、上限を超える輪をさらに外側へ押す更新は保留する。上限から戻す更新は許可する。最終出力の比例縮小は引き続き適用する。</p>
+<p>全軸ゼロ指令、無効指令、目標途絶、odom異常、出力抑止で積分をゼロにする。1軸だけ目標ゼロの場合はPI制御を継続する。診断には <code>p_correction</code>、<code>i_correction</code>、<code>integral</code>、<code>dt</code>、<code>integral_blocked</code> を追加。既存 <code>correction</code> はPとIの合計とする。本書の旧版説明中のP制御・P補正は、v0.7ではこのPI仕様に置き換わる。</p>
 </main></body></html>

@@ -1,6 +1,6 @@
 # locomotion_closed_loop
 
-ZED odomの実測速度を使う3軸P制御ノード。車体基準へのTF変換、サンプル数指定の移動平均、4輪配分、比例縮小による出力制限を備える。既存 `locomotion_core` のコードは変更しない。
+ZED odomの実測速度を使う3軸PI制御ノード。車体基準へのTF変換、サンプル数指定の移動平均、4輪配分、比例縮小による出力制限を備える。既存 `locomotion_core` のコードは変更しない。
 
 ## ビルド・起動
 
@@ -27,13 +27,13 @@ ros2 launch locomotion_closed_loop closed_loop_velocity.launch.py start_motor_dr
 
 ## 実機に合わせる設定
 
-初期設定は `use_camera_frame: true`。ZED odomの速度をカメラ基準のまま使用し、TFもbase_linkも不要。目標速度も同じカメラ軸基準として扱い、移動平均とP制御へ渡す。取付位置・向きの補正は行わない。
+初期設定は `use_camera_frame: true`。ZED odomの速度をカメラ基準のまま使用し、TFもbase_linkも不要。目標速度も同じカメラ軸基準として扱い、移動平均とPI制御へ渡す。取付位置・向きの補正は行わない。
 
 車体基準の変換を使用する場合のみ `use_camera_frame: false` とし、`body_frame` とodomの `child_frame_id` を結ぶTFを用意する。両フレームが一致するときは変換しない。異なる場合は計測時刻のTFで回転と取付位置補正を行う。
 
 `motor_command_limit: 0.0` は駆動抑止。実機のRoboteq設定で確認した指令上限を正の値で設定する。これはRPM上限と断定できない。既存の固定±15クリップは使わない。4輪の最大絶対値が設定上限を超えたら全輪を同じ比率で縮小する。
 
-暫定値はKp=0.1（各軸）、30 Hz、移動平均5サンプル、目標・odomタイムアウト0.5秒。実機で調整する。出力ゲイン1000/1000/30と配分係数375/63.5は既存値を踏襲し、単位変換としては扱わない。I項・D項はない。
+暫定値はKp=0.1（各軸）、30 Hz、移動平均5サンプル、目標・odomタイムアウト0.5秒。実機で調整する。出力ゲイン1000/1000/30と配分係数375/63.5は既存値を踏襲し、単位変換としては扱わない。Kiは各軸暫定0.2 [1/s]。Ki=0でP制御になる。D項はない。
 
 `velocity_filter_enabled: false` または `velocity_filter_window_size: 1` で平滑化なし。全パラメーターは起動時設定であり、変更後は再起動する。
 
@@ -47,7 +47,7 @@ ZEDの追跡状態トピックによる停止判定は未実装。現在はodom�
 
 ## 診断とテスト
 
-`/closed_loop_velocity/diagnostics`（`std_msgs/msg/String`、JSON）に目標、変換後の生速度、平滑化速度、誤差、P補正、制限前後の出力、縮小比率、サンプル数、履歴の時間幅、計測経過時間、停止理由を出す。
+`/closed_loop_velocity/diagnostics`（`std_msgs/msg/String`、JSON）に目標、変換後の生速度、平滑化速度、誤差、P補正・I補正・積分値・実測制御周期・積分抑制状態、制限前後の出力、縮小比率、サンプル数、履歴の時間幅、計測経過時間、停止理由を出す。
 
 ```bash
 ros2 topic echo /closed_loop_velocity/diagnostics
@@ -55,3 +55,9 @@ PYTHONPATH=src/locomotion_closed_loop:$PYTHONPATH ROS_DOMAIN_ID=173 python3 -m p
 ```
 
 ROS_DOMAIN_ID=173はテスト用の分離例。テストはドライバーを起動しない。
+
+## PI制御
+
+`e = target - measured`、`I = I + e * dt`、`corrected = target + Kp * e + Ki * I`。
+時間は単調時計の実測値を使用し、初回・復帰時はdt=0。制御間隔が目標/odomタイムアウトの小さい方を超えた場合も積分をリセットする。
+各軸の積分更新をx、y、yaw順に評価し、4輪のどれかを上限の外側へさらに押す更新は保留する。飽和を戻す更新は許可する。全軸ゼロ指令、無効指令、目標途絶、odom異常、出力抑止時は積分をリセットする。1軸だけゼロの場合は、その軸の積分も継続する。

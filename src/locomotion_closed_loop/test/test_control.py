@@ -79,3 +79,44 @@ def test_unconfigured_limit_inhibits_output():
     c.add_sample((0, 0, 0), 1, 0.)
     assert c.output(.1)['state'] == 'motor_limit_not_configured'
     assert c.output(.1)['output'] == (0,)*4
+
+
+def test_pi_accumulation_and_reset():
+    c = VelocityControl(kp=(.1,)*3, ki=(.2,)*3, gains=(1,)*3,
+                        lever=1, radius=1, motor_limit=100)
+    c.set_command((.1, .2, .3), 0.)
+    c.add_sample((0, 0, 0), 1, 0.)
+    assert c.output(0.)['integral'] == (0, 0, 0)
+    result = c.output(.2)
+    assert result['integral'] == pytest.approx((.02, .04, .06))
+    assert result['correction'] == pytest.approx((.014, .028, .042))
+    c.set_command((0, 0, 0), .3)
+    assert c.integral == (0, 0, 0)
+    c.set_command((.1, 0, 0), .3)
+    assert c.output(.3)['dt'] == 0
+    c.output(.4)
+    c.output(1.)
+    assert c.integral == (0, 0, 0)
+
+
+def test_pi_antiwindup_and_unwind():
+    c = VelocityControl(kp=(0,)*3, ki=(1,0,0), gains=(1,)*3,
+                        lever=1, radius=1, motor_limit=1)
+    c.set_command((.9, 0, 0), 0.)
+    c.add_sample((0, 0, 0), 1, 0.)
+    c.output(0.)
+    assert c.output(.1)['integral'][0] == pytest.approx(.09)
+    result = c.output(.2)
+    assert result['integral_blocked'][0]
+    assert result['integral'][0] == pytest.approx(.09)
+    c.set_command((1.1, 0, 0), .2)
+    c.samples.clear()
+    c.add_sample((1.2, 0, 0), 2, .2)
+    assert c.output(.3)['integral'][0] == pytest.approx(.08)
+    c.invalidate_odom('invalid')
+    assert c.integral == (0, 0, 0)
+
+
+def test_invalid_ki():
+    with pytest.raises(ValueError):
+        VelocityControl(ki=(-1, 0, 0))
