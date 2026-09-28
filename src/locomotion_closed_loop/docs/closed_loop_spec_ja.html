@@ -1,0 +1,365 @@
+<!doctype html>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>3軸クローズドループ速度制御 仕様書 v0.4</title><style>body{margin:0;background:#f3f5f8;color:#172638;font:16px/1.8 system-ui,-apple-system,"Noto Sans JP",sans-serif}main{max-width:1080px;margin:32px auto;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 24px #17263810}h1{font-size:1.9rem;border-bottom:4px solid #207d91;padding-bottom:18px}h2{margin-top:2.4em;border-left:5px solid #207d91;padding-left:14px;font-size:1.35rem}a{color:#086981}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;margin:20px 0;font-size:.94rem}th,td{border:1px solid #d5dfe8;padding:10px 14px;text-align:left;vertical-align:top}th{background:#eaf2f6}tr:nth-child(even){background:#f8fafc}pre{overflow:auto;background:#102b3b;color:#e7f3f9;padding:20px;border-radius:8px;line-height:1.6}code{font-family:ui-monospace,monospace;font-size:.92em}p code,li code,td code{background:#edf2f7;padding:2px 4px;border-radius:3px}nav{background:#eaf2f6;padding:12px 18px;border-radius:6px}@media(max-width:700px){main{margin:0;padding:20px;border-radius:0}h1{font-size:1.5rem}}@media print{body{background:white;font-size:10pt}main{margin:0;max-width:none;padding:0;box-shadow:none}pre{background:#f0f3f6;color:black;white-space:pre-wrap}h2{break-after:avoid}tr{break-inside:avoid}nav{display:none}}</style></head><body><main><nav>検討用ドラフト v0.4 · <a href="closed_loop_spec_ja.md">Markdown版</a></nav><h1>3軸クローズドループ速度制御 仕様書</h1>
+<p>版：0.4 ／ 作成日：2026-09-28 ／ 状態：検討用ドラフト</p>
+<h2>1. 目的と範囲</h2>
+<p><code>locomotion_core</code> とは別の <code>mobile_robot_system/src/locomotion_closed_loop/</code> に、ZED_WRAPPERからの実測速度を使う車体速度制御を構築する。前後・左右・旋回の3軸を対象とする。</p>
+<p>本書は仕様のたたき台。v0.4で初期実装を追加した。既存locomotion_coreは変更せず、別パッケージとして提供する。以下の案・未決定事項に対する暫定実装値と未実装範囲は第14節に記載する。</p>
+<h2>2. 合意済みの前提</h2>
+<ul>
+<li>制御対象は前後 <code>vx</code>、左右 <code>vy</code>、旋回 <code>wz</code> の3軸すべて。</li>
+<li>初期実装はP制御のみとする。I項・D項は実装しない。</li>
+<li>目標速度入力は既存の <code>/rov_cmd_vel</code>（<code>geometry_msgs/msg/Twist</code>）を想定する。会話中の <code>rov_vel_cmd</code> に対し、コード上の名称は <code>/rov_cmd_vel</code>。</li>
+<li><code>linear.x</code> と <code>linear.y</code> は m/s、<code>angular.z</code> は rad/s。</li>
+<li>フィードバックにはZED_WRAPPERの速度を使用し、移動平均フィルタを掛けて使えるようにする。</li>
+<li>既存の <code>×1000</code>（並進）と <code>×30</code>（旋回）は調整用ゲインとして扱う。単位変換という説明は採用しない。</li>
+<li>現行の固定出力制限 <code>±15</code> を外す方針とする。ドライバーの許容範囲に基づく最終出力上限は別途決定する。</li>
+</ul>
+<h2>3. 現行実装の確認結果</h2>
+<p>確認元：<code>locomotion_core/locomotion_core/rover_velocity.py</code>、<code>RoverDescription.py</code>、<code>cmd_roboteq.py</code>。</p>
+<table>
+<thead>
+<tr>
+<th>処理</th>
+<th>現行の動作</th>
+<th>新仕様での扱い</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>目標入力</td>
+<td><code>/rov_cmd_vel</code> のTwistを購読</td>
+<td>同じ入力形式を使用する案</td>
+</tr>
+<tr>
+<td>入力ゲイン</td>
+<td><code>[1000 × vx, 1000 × vy, 30 × wz]</code></td>
+<td>調整用ゲイン。パラメーター化する案</td>
+</tr>
+<tr>
+<td>各輪への配分</td>
+<td><code>kinematic_equation()</code> を使用</td>
+<td>軸、符号、車輪順を照合して定義</td>
+</tr>
+<tr>
+<td>固定制限</td>
+<td>各輪を個別に <code>[-15, 15]</code> に制限</td>
+<td>新実装では引き継がない</td>
+</tr>
+<tr>
+<td>出力</td>
+<td><code>rov/motors</code>、Float32MultiArray、4要素</td>
+<td>既存ドライバーとの接続候補</td>
+</tr>
+<tr>
+<td>送信周期</td>
+<td>0.1秒</td>
+<td>新制御周期はZED更新周期とともに決定</td>
+</tr>
+<tr>
+<td>ドライバー</td>
+<td>値を整数化・符号反転し、<code>!G</code> で送信</td>
+<td>指令単位と実機モードを要確認</td>
+</tr>
+</tbody>
+</table>
+<p>変数名は <code>rpm_vec</code> だが、この経路では <code>vel_to_rpm()</code> は呼ばれていない。本書では <code>/rov/motors</code> の値を「モーター指令値」と呼び、物理量としてのRPMとは断定しない。</p>
+<p>配列の要素0・1は前側ドライバーのチャンネル1・2、要素2・3は後側ドライバーのチャンネル1・2に送信される。各チャンネルと実際の車輪位置・正回転方向の対応は実機確認事項とする。</p>
+<h2>4. 構成案</h2>
+<pre><code class="language-text">ZED_WRAPPER → odom → 入力検証 → 車体座標・基準点へ変換
+                                  ↓
+                          3軸の移動平均フィルタ
+                                  ↓
+/rov_cmd_vel → 目標速度 ──→ 目標速度 − 平滑化した実測速度
+                  │               ↓
+                  └──────→ 目標速度 ＋ 軸別P補正
+                                  ↓
+                          出力ゲイン → 4輪配分
+                                  ↓
+                          最終出力制限 → ドライバー → ロボット
+</code></pre>
+<p>入力の鮮度と有効性はフィルタとは独立に判定し、異常時は制御出力をゼロにする。</p>
+<p>新ノードの仮称は <code>closed_loop_velocity</code>。既存の <code>rover_velocity</code> と新ノードが同時に同一モータートピックへ出力しない起動構成にする。</p>
+<h2>5. 入出力案</h2>
+<table>
+<thead>
+<tr>
+<th>種別</th>
+<th>トピック</th>
+<th>メッセージ</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入力</td>
+<td><code>/rov_cmd_vel</code></td>
+<td><code>geometry_msgs/msg/Twist</code></td>
+<td>目標vx・vy・wz</td>
+</tr>
+<tr>
+<td>入力</td>
+<td><code>/zed2i/zed_node/odom</code></td>
+<td><code>nav_msgs/msg/Odometry</code></td>
+<td><code>twist.twist.linear.x/y</code>、<code>angular.z</code>を含む実測速度</td>
+</tr>
+<tr>
+<td>出力</td>
+<td><code>/rov/motors</code></td>
+<td><code>std_msgs/msg/Float32MultiArray</code></td>
+<td>4輪のモーター指令値</td>
+</tr>
+<tr>
+<td>接続検討</td>
+<td><code>/deadman</code></td>
+<td><code>std_msgs/msg/Bool</code></td>
+<td>既存ドライバーの有効化との整合。発行主体は未決定</td>
+</tr>
+<tr>
+<td>診断</td>
+<td>名称・型は未決定</td>
+<td>未決定</td>
+<td>目標、フィルタ前後の実測、誤差、出力、飽和、停止理由</td>
+</tr>
+</tbody>
+</table>
+<p>トピック名はパラメーターまたはremapで変更できる構成を想定する。ZEDトピック名は既存のdata hub仕様書に基づく候補であり、実機の型・更新周期・QoS・速度フィールドの配信状況を確認する。</p>
+<h2>6. 実測速度の座標系</h2>
+<p>比較する目標速度と実測速度は、車体基準の同じ座標系・同じ基準点にそろえる。車体軸は前方を+x、左方を+y、上方を+zとする案。正のwzは上から見た反時計回りとする。</p>
+<p>ZED odomの <code>child_frame_id</code> と、速度が表す基準点を実機で確認する。カメラ基準の速度である場合は、軸の回転変換だけでなく、車体中心からカメラまでの取付位置も考慮する。すでに車体基準に変換された速度を二重に補正しない。</p>
+<p>車体中心からカメラ基準点へのベクトルを車体座標で <code>r</code> とすると、剛体の関係は次の通り。</p>
+<pre><code class="language-text">v_body_origin = R × v_camera − omega_body × r
+omega_body   = R × omega_camera
+</code></pre>
+<p>変換後のvx・vy・wzに移動平均フィルタを適用し、その結果を制御に使用する。必要なTFが得られない場合の扱い、固定取付値を設定として持つかは実装前に決める。</p>
+<h2>6.1. ZED速度の移動平均フィルタ案</h2>
+<p>車体座標・基準点への変換後に、vx・vy・wzの各軸へ単純移動平均を適用する。3軸で同じサンプル群と共通の窓サイズNを使用し、軸ごとに算術平均を計算する。目標速度にはこのフィルタを掛けない。</p>
+<pre><code class="language-text">q_body[k] = 車体座標・基準点に変換した最新の有効な実測速度
+m         = min(N, リセット後に受け入れたサンプル数)
+q_filtered[k] = (q_body[k] + ... + q_body[k-m+1]) / m
+q_meas    = q_filtered[k]
+</code></pre>
+<ul>
+<li><code>velocity_filter_enabled</code> で有効・無効を切り替える。無効時は最新の有効なq_bodyを使用する。</li>
+<li><code>velocity_filter_window_size</code> は1以上の整数。N=1は平滑化なしと同じ。N=0、負数、小数は設定エラーとして受け付けない。</li>
+<li>新しい有効なodomサンプルを受け入れたときだけ履歴を更新する。制御タイマーごとに同じサンプルを重複追加しない。同一ヘッダー時刻の再配信も追加しない。</li>
+<li>初期状態とリセット直後は、到着済みのm個で平均する。ゼロ埋めせず、N個がそろうまで待たない。1個もない間は速度未受信としてゼロ出力とする。</li>
+<li>制御周期では最新の平均値を参照するが、鮮度は元のodomの受信時刻・計測時刻で判定する。平均値を再利用しても鮮度を更新しない。</li>
+<li>ZED更新途絶、無効値（NaN/Infを含む）、必要な座標変換不可、検出された追跡異常、計測時刻の逆行・時刻リセットでは、3軸すべての履歴を破棄してゼロ出力とする。古い履歴で異常を隠さない。復旧後は新しい有効サンプルから平均を再開する。駆動の復帰条件は第9節で別途定める。</li>
+<li>停止指令や目標指令の途絶だけでは、有効なZEDの履歴を破棄しない。ゼロ出力中も観測を続ける。</li>
+<li>設定は起動時に読み込む案とする。動作中の窓サイズ変更は初期実装の対象外とする。</li>
+</ul>
+<p>窓サイズを大きくすると速度の細かな揺れを抑えられる一方、応答が遅くなる。等間隔のサンプル周期をTとすると、窓が満ちた移動平均の遅延の目安は <code>(N−1)×T/2</code>。例えば30 Hz・N=5なら約67 msであり、ZED自体や通信の遅延は別に加わる。これは説明用の例で、実機の配信周期や採用値を示すものではない。</p>
+<p>本方式はサンプル数による窓であり、時間幅固定の平均ではない。到着間隔が変動すると履歴の時間幅も変わるため、使用サンプル数と最古・最新の計測時刻の差を診断に記録する。有効を初期設定とする案とし、Nの初期値はノイズ・遅延・追従性を比較して決める。</p>
+<h2>7. 制御則案</h2>
+<p>3軸を独立したP制御で補正する。目標速度を基本入力として加え、速度誤差に比例する補正を上乗せする。I項・D項は使用しない。横移動・前後移動・旋回でゲインを別々に設定する。</p>
+<pre><code class="language-text">q_target = [vx_target, vy_target, wz_target]
+q_meas   = [vx_filtered, vy_filtered, wz_filtered]  # フィルタ無効時は最新の車体基準実測値
+e        = q_target − q_meas
+q_ctrl   = q_target + Kp ⊙ e
+u_raw    = M × (G ⊙ q_ctrl)
+</code></pre>
+<p><code>⊙</code> は軸ごとの積、<code>M</code> は4輪への配分行列、<code>G</code> はモーター出力を調整する軸別ゲイン。P補正は並進m/s・旋回rad/sの段階で行い、出力ゲインとは分離する。<code>Kp</code> は無次元。<code>G</code> と <code>M</code> を通した結果の指令単位はドライバー仕様を確認して定義する。</p>
+<p>現行の1000・1000・30は比較用の既存値として記録し、新しい閉ループ制御の確定ゲインとはしない。制御周期、ゲイン、移動平均の窓サイズは計測後に決定する。今回の実装にはKi、積分状態、積分上限、アンチワインドアップ処理を設けない。P制御で残る定常誤差は評価結果として記録する。</p>
+<h2>8. 固定±15制限の撤廃と最終出力</h2>
+<p>撤廃対象は <code>rover_velocity.py</code> にある各輪の固定 <code>±15</code> 制限。新実装ではこの制限を引き継がない。既存ノード自体も変更するかは実装範囲として別途決める。</p>
+<p>ドライバー指令の許容範囲を確認したうえで、最終出力上限をパラメーターにする案。共通上限を <code>Umax</code> とすると、上限超過時は次の比率で4輪を一括縮小する。</p>
+<pre><code class="language-text">scale = min(1, Umax / max(abs(u_raw)))  # 全要素ゼロならscale=1
+u_out = scale × u_raw
+</code></pre>
+<p>一括縮小は配分した4輪の比率を維持するための処理であり、実機の速度方向を保証するものではない。飽和状態と制限前後の出力を記録し、上限によって目標速度への追従が制約されていることを確認できるようにする。</p>
+<h2>9. 動作状態と停止案</h2>
+<table>
+<thead>
+<tr>
+<th>状態・条件</th>
+<th>出力の扱い</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>起動直後、入力未受信</td>
+<td>ゼロ出力</td>
+</tr>
+<tr>
+<td>有効な目標・実測がそろう</td>
+<td>3軸制御を実行</td>
+</tr>
+<tr>
+<td>3軸すべてがゼロの停止指令</td>
+<td>ゼロ出力</td>
+</tr>
+<tr>
+<td>1軸だけ目標ゼロ</td>
+<td>他軸とともにP制御を継続。その軸の実測速度もゼロへ追従</td>
+</tr>
+<tr>
+<td>目標指令の更新途絶</td>
+<td>ゼロ出力</td>
+</tr>
+<tr>
+<td>ZED更新途絶・無効値・必要な座標変換不可</td>
+<td>ゼロ出力</td>
+</tr>
+<tr>
+<td>追跡異常</td>
+<td>有効性判定の情報源を確定後、停止条件として実装</td>
+</tr>
+</tbody>
+</table>
+<p>全軸ゼロ時は、積極的に速度ゼロへフィードバックする保持制御ではなく、モーター指令ゼロを出す案。これは機械的な即時停止や位置保持を意味しない。復帰時に新しい目標指令を要求するか、自動復帰するかは未決定。</p>
+<p>Twistには時刻がないため目標指令の鮮度は受信時刻で判定する案。ZEDは受信時刻とヘッダー時刻の双方を確認し、同じ古いデータの再配信を新鮮な計測として扱わない。タイムアウト値、許容遅延、時刻不連続時の扱いを定義する。</p>
+<p>既存ドライバーのコードには受信途絶を監視して停止する処理が見当たらない。新制御ノードが停止した場合はゼロ出力を送れないため、ドライバー側または機器側のウォッチドッグを確認する。<code>deadman=False</code> は次のモーター指令コールバックで反映される実装であり、Boolを送るだけで即座に停止する仕様とは扱わない。</p>
+<h2>10. パラメーター候補</h2>
+<table>
+<thead>
+<tr>
+<th>分類</th>
+<th>項目</th>
+<th>初期値の扱い</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>入出力</td>
+<td>目標・odom・モーターのトピック名</td>
+<td>本書の候補を基準にする</td>
+</tr>
+<tr>
+<td>制御</td>
+<td>制御周波数</td>
+<td>ZED実測周期と遅延を確認後に決定</td>
+</tr>
+<tr>
+<td>P制御</td>
+<td>kp_x / kp_y / kp_yaw</td>
+<td>未定。各軸を個別に調整</td>
+</tr>
+<tr>
+<td>出力</td>
+<td>gain_x / gain_y / gain_yaw</td>
+<td>未定。既存値は1000 / 1000 / 30</td>
+</tr>
+<tr>
+<td>配分</td>
+<td>車輪順、回転符号、寸法・配分行列</td>
+<td>既存実装と実機を照合</td>
+</tr>
+<tr>
+<td>制限</td>
+<td>モーター指令上限</td>
+<td>単位・実機仕様を確認後に決定</td>
+</tr>
+<tr>
+<td>鮮度</td>
+<td>command_timeout、odom_timeout、許容遅延</td>
+<td>未定</td>
+</tr>
+<tr>
+<td>座標系</td>
+<td>車体フレーム、ZEDの基準フレーム、取付変換</td>
+<td>実機を確認</td>
+</tr>
+<tr>
+<td>計測</td>
+<td>velocity_filter_enabled</td>
+<td>trueの案。falseで平滑化を無効化</td>
+</tr>
+<tr>
+<td>計測</td>
+<td>velocity_filter_window_size</td>
+<td>3軸共通のサンプル数N（整数、1以上）。初期値は実測後に決定</td>
+</tr>
+</tbody>
+</table>
+<h2>11. 確認・評価の進め方</h2>
+<ol>
+<li>ZEDの静止・前後・左右・旋回時の速度を記録し、単位、符号、座標系、更新周期、遅延を確認する。</li>
+<li>ドライバーの運転モード、<code>!G</code> の指令単位・範囲、車輪順、符号、整数化の影響を確認する。</li>
+<li>新実装で固定±15制限を除いた出力経路を確認する。初期ゲインは実測に基づいて決める。</li>
+<li>フィルタ無効・N=1・複数の窓サイズで、静止時の揺れと速度変化時の遅延を比較する。選んだ窓サイズでKpを各軸個別に調整し、その後に3軸同時入力を評価する。</li>
+<li>P制御で残る定常誤差、振動の有無、飽和からの復帰を確認する。</li>
+<li>フィルタの初期サンプル、同一データの重複排除、異常時の履歴破棄、復旧後の再開を確認する。</li>
+<li>停止指令、目標更新途絶、ZED更新途絶、無効値、制御ノード終了時の停止経路を確認する。</li>
+</ol>
+<p>記録項目は時刻、目標速度、車体基準のフィルタ前後の実測速度、フィルタ設定、使用サンプル数、履歴の時間幅、誤差、P補正、制限前後の4輪出力、飽和状態、計測の経過時間、動作状態と停止理由。追従誤差、整定時間、オーバーシュート、停止までの時間の合格値は未決定。</p>
+<h2>12. 次に決める事項</h2>
+<ul>
+<li>実機Roboteqの運転モードとモーター指令の単位・上限。</li>
+<li>ZED速度の実際の基準フレーム・基準点と車体への取付変換。</li>
+<li>既存ゲインと4輪配分をどこまで踏襲するか。</li>
+<li>制御周期、タイムアウト、追跡異常の判定方法。</li>
+<li>移動平均の窓サイズNの初期値と、許容する計測遅延。</li>
+<li>全軸ゼロ指令時のゼロ出力動作と、異常からの復帰条件。</li>
+<li>既存ドライバーの再利用範囲、deadmanの発行主体、ウォッチドッグ。</li>
+<li>実機評価の数値目標。</li>
+</ul>
+<h2>13. 関連資料</h2>
+<ul>
+<li><a href="../../locomotion_core/locomotion_core/rover_velocity.py">既存速度変換ノード</a></li>
+<li><a href="../../locomotion_core/locomotion_core/RoverDescription.py">既存4輪配分</a></li>
+<li><a href="../../locomotion_core/locomotion_core/cmd_roboteq.py">既存モータードライバー</a></li>
+<li><a href="../../zed_wrapper_data_hub/docs/zed_wrapper_data_hub_design_ja.md">ZED data hub設計書</a></li>
+</ul>
+<h2>14. 初期実装（v0.4）</h2>
+<p><code>locomotion_closed_loop</code> のROS 2 Pythonパッケージを実装した。起動手順は <a href="../README.md">README</a> を参照。</p>
+<table>
+<thead>
+<tr>
+<th>項目</th>
+<th>初期実装</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>制御</td>
+<td>目標速度＋3軸独立P補正。各Kpは暫定0.1</td>
+</tr>
+<tr>
+<td>周期</td>
+<td>暫定30 Hz</td>
+</tr>
+<tr>
+<td>フィルタ</td>
+<td>単純移動平均、有効、暫定N=5。到着済みサンプルで平均</td>
+</tr>
+<tr>
+<td>座標変換</td>
+<td>計測時刻のTFでchild_frame_idからbody_frameへ変換。取付位置補正あり</td>
+</tr>
+<tr>
+<td>車体フレーム</td>
+<td>暫定base_link。実機に合わせて設定</td>
+</tr>
+<tr>
+<td>配分</td>
+<td>既存の4輪順・符号・係数を踏襲。ゲイン1000/1000/30、配分係数375/63.5</td>
+</tr>
+<tr>
+<td>制限</td>
+<td>固定±15なし。motor_command_limitで比例縮小。初期値0は駆動抑止</td>
+</tr>
+<tr>
+<td>タイムアウト</td>
+<td>目標・odom各0.5秒、計測の許容古さ0.5秒、未来時刻許容0.05秒</td>
+</tr>
+<tr>
+<td>復帰</td>
+<td>有効な新規odomと期限内の目標指令がそろえば自動復帰</td>
+</tr>
+<tr>
+<td>設定変更</td>
+<td>起動時のみ。実行中の変更は拒否</td>
+</tr>
+<tr>
+<td>診断</td>
+<td>専用トピックへJSON形式でフィルタ前後、制御量、状態を配信</td>
+</tr>
+<tr>
+<td>起動</td>
+<td>launchは制御ノードのみ。ZEDとドライバーは別起動</td>
+</tr>
+</tbody>
+</table>
+<p>これらの数値は実機チューニング済みの値ではない。モーター指令上限は未確定のため、実機で確認した正の上限を設定するまで駆動しない。</p>
+<p>追跡状態トピックの購読・品質異常判定は未実装。odom鮮度・非有限値・時刻逆行・TF取得失敗を検出する。ドライバー側ウォッチドッグとdeadman発行は実装範囲に含めていない。制御ノード終了時のゼロ送信はROSコンテキストが有効な場合のベストエフォートであり、通信断や強制終了への停止保証は実機側・ドライバー側で対応する。</p>
+</main></body></html>

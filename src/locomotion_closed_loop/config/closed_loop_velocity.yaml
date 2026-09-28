@@ -1,0 +1,25 @@
+closed_loop_velocity:
+  ros__parameters:
+    command_topic: /rov_cmd_vel
+    odom_topic: /zed2i/zed_node/odom
+    motor_topic: /rov/motors
+    body_frame: base_link
+    control_frequency: 30.0
+    command_timeout: 0.5
+    odom_timeout: 0.5
+    max_odom_age: 0.5
+    future_tolerance: 0.05
+    # Provisional tuning values; verify on the robot.
+    kp_x: 0.1
+    kp_y: 0.1
+    kp_yaw: 0.1
+    gain_x: 1000.0
+    gain_y: 1000.0
+    gain_yaw: 30.0
+    velocity_filter_enabled: true
+    velocity_filter_window_size: 5
+    # 0 inhibits motion. Set the verified Roboteq command limit before driving.
+    motor_command_limit: 0.0
+    # Legacy allocation coefficients; input gains are tuning gains, not conversion.
+    wheel_lever: 375.0
+    wheel_radius: 63.5
