@@ -3,7 +3,9 @@ closed_loop_velocity:
     command_topic: /rov_cmd_vel
     odom_topic: /zed2i/zed_node/odom
     motor_topic: /rov/motors
-    body_frame: base_link
+    # Use ZED twist directly without TF or mounting-offset correction.
+    use_camera_frame: true
+    body_frame: base_link  # Used only when use_camera_frame is false
     control_frequency: 30.0
     command_timeout: 0.5
     odom_timeout: 0.5

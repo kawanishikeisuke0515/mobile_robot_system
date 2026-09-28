@@ -20,7 +20,7 @@ class ClosedLoopVelocity(Node):
     def __init__(self):
         super().__init__('closed_loop_velocity')
         defaults = dict(command_topic='/rov_cmd_vel', odom_topic='/zed2i/zed_node/odom',
-                        motor_topic='/rov/motors', body_frame='base_link',
+                        motor_topic='/rov/motors', body_frame='base_link', use_camera_frame=True,
                         control_frequency=30., command_timeout=0.5, odom_timeout=0.5,
                         max_odom_age=0.5, future_tolerance=0.05,
                         kp_x=0.1, kp_y=0.1, kp_yaw=0.1,
@@ -35,7 +35,7 @@ class ClosedLoopVelocity(Node):
         for name in ('control_frequency', 'max_odom_age', 'future_tolerance'):
             if not math.isfinite(p[name]) or p[name] <= 0:
                 raise ValueError(f'{name} must be finite and positive')
-        if not p['body_frame']:
+        if not p['use_camera_frame'] and not p['body_frame']:
             raise ValueError('body_frame is required')
         self.core = VelocityControl(
             kp=tuple(p['kp_'+axis] for axis in ('x', 'y', 'yaw')),
@@ -43,8 +43,8 @@ class ClosedLoopVelocity(Node):
             window=p['velocity_filter_window_size'], filter_enabled=p['velocity_filter_enabled'],
             motor_limit=p['motor_command_limit'], command_timeout=p['command_timeout'],
             odom_timeout=p['odom_timeout'], lever=p['wheel_lever'], radius=p['wheel_radius'])
-        self.tf = Buffer()
-        self.tf_listener = TransformListener(self.tf, self)
+        self.tf = None if p['use_camera_frame'] else Buffer()
+        self.tf_listener = TransformListener(self.tf, self) if self.tf is not None else None
         self.motor_pub = self.create_publisher(Float32MultiArray, p['motor_topic'], 10)
         self.diag_pub = self.create_publisher(String, '~/diagnostics', 10)
         self.create_subscription(Twist, p['command_topic'], self.command_callback, 10)
@@ -73,13 +73,13 @@ class ClosedLoopVelocity(Node):
         if age > self.p['max_odom_age'] or age < -self.p['future_tolerance']:
             self.invalidate('invalid_odom_age')
             return
-        if not msg.child_frame_id:
+        if not self.p['use_camera_frame'] and not msg.child_frame_id:
             self.invalidate('missing_child_frame')
             return
         twist = msg.twist.twist
         rotation, offset = (0., 0., 0., 1.), (0., 0., 0.)
         try:
-            if msg.child_frame_id != self.p['body_frame']:
+            if not self.p['use_camera_frame'] and msg.child_frame_id != self.p['body_frame']:
                 tf = self.tf.lookup_transform(self.p['body_frame'], msg.child_frame_id, stamp).transform
                 rotation = (tf.rotation.x, tf.rotation.y, tf.rotation.z, tf.rotation.w)
                 offset = (tf.translation.x, tf.translation.y, tf.translation.z)
@@ -110,6 +110,7 @@ class ClosedLoopVelocity(Node):
                 self.invalidate('invalid_odom_age')
         result = self.core.output(time.monotonic())
         self.motor_pub.publish(Float32MultiArray(data=list(result['output'])))
+        result['use_camera_frame'] = self.p['use_camera_frame']
         result['filter_enabled'] = self.p['velocity_filter_enabled']
         result['window_size'] = self.p['velocity_filter_window_size']
         result['odom_age'] = (clock-self.latest_stamp)*1e-9 if self.latest_stamp is not None else None

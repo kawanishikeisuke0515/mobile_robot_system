@@ -21,7 +21,9 @@ launchは制御ノードのみを起動する。ZED_WRAPPERとモータードラ
 
 ## 実機に合わせる設定
 
-`config/closed_loop_velocity.yaml` の `body_frame` と、odomの `child_frame_id` から車体へのTFを確認する。両フレームが一致するときは変換しない。異なる場合は計測時刻でTFを参照し、回転と取付位置による速度補正を行う。TFがない場合は出力ゼロになる。
+初期設定は `use_camera_frame: true`。ZED odomの速度をカメラ基準のまま使用し、TFもbase_linkも不要。目標速度も同じカメラ軸基準として扱い、移動平均とP制御へ渡す。取付位置・向きの補正は行わない。
+
+車体基準の変換を使用する場合のみ `use_camera_frame: false` とし、`body_frame` とodomの `child_frame_id` を結ぶTFを用意する。両フレームが一致するときは変換しない。異なる場合は計測時刻のTFで回転と取付位置補正を行う。
 
 `motor_command_limit: 0.0` は駆動抑止。実機のRoboteq設定で確認した指令上限を正の値で設定する。これはRPM上限と断定できない。既存の固定±15クリップは使わない。4輪の最大絶対値が設定上限を超えたら全輪を同じ比率で縮小する。
 

@@ -1,9 +1,9 @@
 <!doctype html>
-<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>3軸クローズドループ速度制御 仕様書 v0.4</title><style>body{margin:0;background:#f3f5f8;color:#172638;font:16px/1.8 system-ui,-apple-system,"Noto Sans JP",sans-serif}main{max-width:1080px;margin:32px auto;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 24px #17263810}h1{font-size:1.9rem;border-bottom:4px solid #207d91;padding-bottom:18px}h2{margin-top:2.4em;border-left:5px solid #207d91;padding-left:14px;font-size:1.35rem}a{color:#086981}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;margin:20px 0;font-size:.94rem}th,td{border:1px solid #d5dfe8;padding:10px 14px;text-align:left;vertical-align:top}th{background:#eaf2f6}tr:nth-child(even){background:#f8fafc}pre{overflow:auto;background:#102b3b;color:#e7f3f9;padding:20px;border-radius:8px;line-height:1.6}code{font-family:ui-monospace,monospace;font-size:.92em}p code,li code,td code{background:#edf2f7;padding:2px 4px;border-radius:3px}nav{background:#eaf2f6;padding:12px 18px;border-radius:6px}@media(max-width:700px){main{margin:0;padding:20px;border-radius:0}h1{font-size:1.5rem}}@media print{body{background:white;font-size:10pt}main{margin:0;max-width:none;padding:0;box-shadow:none}pre{background:#f0f3f6;color:black;white-space:pre-wrap}h2{break-after:avoid}tr{break-inside:avoid}nav{display:none}}</style></head><body><main><nav>検討用ドラフト v0.4 · <a href="closed_loop_spec_ja.md">Markdown版</a></nav><h1>3軸クローズドループ速度制御 仕様書</h1>
-<p>版：0.4 ／ 作成日：2026-09-28 ／ 状態：検討用ドラフト</p>
+<html lang="ja"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>3軸クローズドループ速度制御 仕様書 v0.5</title><style>body{margin:0;background:#f3f5f8;color:#172638;font:16px/1.8 system-ui,-apple-system,"Noto Sans JP",sans-serif}main{max-width:1080px;margin:32px auto;padding:40px;background:white;border-radius:12px;box-shadow:0 4px 24px #17263810}h1{font-size:1.9rem;border-bottom:4px solid #207d91;padding-bottom:18px}h2{margin-top:2.4em;border-left:5px solid #207d91;padding-left:14px;font-size:1.35rem}a{color:#086981}table{border-collapse:collapse;width:100%;display:block;overflow-x:auto;margin:20px 0;font-size:.94rem}th,td{border:1px solid #d5dfe8;padding:10px 14px;text-align:left;vertical-align:top}th{background:#eaf2f6}tr:nth-child(even){background:#f8fafc}pre{overflow:auto;background:#102b3b;color:#e7f3f9;padding:20px;border-radius:8px;line-height:1.6}code{font-family:ui-monospace,monospace;font-size:.92em}p code,li code,td code{background:#edf2f7;padding:2px 4px;border-radius:3px}nav{background:#eaf2f6;padding:12px 18px;border-radius:6px}@media(max-width:700px){main{margin:0;padding:20px;border-radius:0}h1{font-size:1.5rem}}@media print{body{background:white;font-size:10pt}main{margin:0;max-width:none;padding:0;box-shadow:none}pre{background:#f0f3f6;color:black;white-space:pre-wrap}h2{break-after:avoid}tr{break-inside:avoid}nav{display:none}}</style></head><body><main><nav>検討用ドラフト v0.5 · <a href="closed_loop_spec_ja.md">Markdown版</a></nav><h1>3軸クローズドループ速度制御 仕様書</h1>
+<p>版：0.5 ／ 作成日：2026-09-28 ／ 状態：検討用ドラフト</p>
 <h2>1. 目的と範囲</h2>
 <p><code>locomotion_core</code> とは別の <code>mobile_robot_system/src/locomotion_closed_loop/</code> に、ZED_WRAPPERからの実測速度を使う車体速度制御を構築する。前後・左右・旋回の3軸を対象とする。</p>
-<p>本書は仕様のたたき台。v0.4で初期実装を追加した。既存locomotion_coreは変更せず、別パッケージとして提供する。以下の案・未決定事項に対する暫定実装値と未実装範囲は第14節に記載する。</p>
+<p>本書は仕様のたたき台。v0.5で初期実装を追加した。既存locomotion_coreは変更せず、別パッケージとして提供する。以下の案・未決定事項に対する暫定実装値と未実装範囲は第14節に記載する。</p>
 <h2>2. 合意済みの前提</h2>
 <ul>
 <li>制御対象は前後 <code>vx</code>、左右 <code>vy</code>、旋回 <code>wz</code> の3軸すべて。</li>
@@ -124,6 +124,7 @@
 </table>
 <p>トピック名はパラメーターまたはremapで変更できる構成を想定する。ZEDトピック名は既存のdata hub仕様書に基づく候補であり、実機の型・更新周期・QoS・速度フィールドの配信状況を確認する。</p>
 <h2>6. 実測速度の座標系</h2>
+<p><strong>v0.5の採用仕様：カメラ基準を使用する。</strong> <code>use_camera_frame: true</code> を初期設定とし、ZED odomのtwistをそのまま移動平均・P制御へ渡す。目標速度も同じ軸基準として扱う。TF検索は行わず、base_linkは不要。以下の車体基準変換は <code>use_camera_frame: false</code> を指定した場合だけ適用する。構成図とフィルタ節の「車体基準」は、カメラ基準モードでは「ZEDから受け取った基準」と読み替える。</p>
 <p>比較する目標速度と実測速度は、車体基準の同じ座標系・同じ基準点にそろえる。車体軸は前方を+x、左方を+y、上方を+zとする案。正のwzは上から見た反時計回りとする。</p>
 <p>ZED odomの <code>child_frame_id</code> と、速度が表す基準点を実機で確認する。カメラ基準の速度である場合は、軸の回転変換だけでなく、車体中心からカメラまでの取付位置も考慮する。すでに車体基準に変換された速度を二重に補正しない。</p>
 <p>車体中心からカメラ基準点へのベクトルを車体座標で <code>r</code> とすると、剛体の関係は次の通り。</p>
@@ -300,7 +301,7 @@ u_out = scale × u_raw
 <li><a href="../../locomotion_core/locomotion_core/cmd_roboteq.py">既存モータードライバー</a></li>
 <li><a href="../../zed_wrapper_data_hub/docs/zed_wrapper_data_hub_design_ja.md">ZED data hub設計書</a></li>
 </ul>
-<h2>14. 初期実装（v0.4）</h2>
+<h2>14. 初期実装（v0.5）</h2>
 <p><code>locomotion_closed_loop</code> のROS 2 Pythonパッケージを実装した。起動手順は <a href="../README.md">README</a> を参照。</p>
 <table>
 <thead>
@@ -324,11 +325,11 @@ u_out = scale × u_raw
 </tr>
 <tr>
 <td>座標変換</td>
-<td>計測時刻のTFでchild_frame_idからbody_frameへ変換。取付位置補正あり</td>
+<td>初期設定はuse_camera_frame=trueで変換なし。false時のみTFと取付位置補正を適用</td>
 </tr>
 <tr>
 <td>車体フレーム</td>
-<td>暫定base_link。実機に合わせて設定</td>
+<td>use_camera_frame=false時のみ使用。暫定base_link</td>
 </tr>
 <tr>
 <td>配分</td>
@@ -362,4 +363,6 @@ u_out = scale × u_raw
 </table>
 <p>これらの数値は実機チューニング済みの値ではない。モーター指令上限は未確定のため、実機で確認した正の上限を設定するまで駆動しない。</p>
 <p>追跡状態トピックの購読・品質異常判定は未実装。odom鮮度・非有限値・時刻逆行・TF取得失敗を検出する。ドライバー側ウォッチドッグとdeadman発行は実装範囲に含めていない。制御ノード終了時のゼロ送信はROSコンテキストが有効な場合のベストエフォートであり、通信断や強制終了への停止保証は実機側・ドライバー側で対応する。</p>
+<h2>15. カメラ基準への変更（v0.5）</h2>
+<p>ユーザー指定によりカメラ基準を標準に変更。ノード既定値とYAMLの両方で <code>use_camera_frame: true</code> とし、TFリスナーも生成しない。モーター指令上限・速度鮮度検証・移動平均・P補正は従来通り適用する。</p>
 </main></body></html>
